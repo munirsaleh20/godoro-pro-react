@@ -29,14 +29,13 @@ export default function EditSaleModal({ open, sale, onClose }) {
 
   const handleSave = async () => {
     setErr('');
-    if (!form.customer.trim()) { setErr('Customer name is required'); return; }
     const total = parseFloat(form.total) || 0;
     const paid = parseFloat(form.paid) || 0;
     if (!total || total <= 0) { setErr('Please enter a valid total'); return; }
 
     setSaving(true);
     try {
-      await updateSale(sale.id, { ...form, total, paid });
+      await updateSale(sale.id, { ...form, customer: form.customer.trim() || 'Walk-in Customer', total, paid });
       showToast('✅ Sale updated!');
       onClose();
     } catch (e) {

@@ -52,7 +52,6 @@ export default function AddSaleModal({ open, lockedLocationId, onClose }) {
   const handleSave = async () => {
     setErr('');
     if (!form.locationId) { setErr('Please select a location'); return; }
-    if (!form.customer.trim()) { setErr('Please enter customer name'); return; }
     if (!resolvedName) { setErr('Please select or type a product'); return; }
     if (!match && (!form.manualPrice || parseFloat(form.manualPrice) <= 0)) {
       setErr('Product not found in stock — please enter a selling price');
@@ -64,7 +63,7 @@ export default function AddSaleModal({ open, lockedLocationId, onClose }) {
       const sale = await addSale({
         locationId: form.locationId,
         staffId: currentUser.id,
-        customer: form.customer.trim(),
+        customer: form.customer.trim() || 'Walk-in Customer',
         phone: form.phone.trim(),
         productId: match ? match.id : null,
         displayName,
@@ -104,8 +103,8 @@ export default function AddSaleModal({ open, lockedLocationId, onClose }) {
 
       <div className="form-row">
         <div className="form-group">
-          <label className="form-label">Customer Name <span className="required">*</span></label>
-          <input className="form-input" value={form.customer} onChange={(e) => setForm({ ...form, customer: e.target.value })} placeholder="Customer name" />
+          <label className="form-label">Customer Name</label>
+          <input className="form-input" value={form.customer} onChange={(e) => setForm({ ...form, customer: e.target.value })} placeholder="Optional — leave blank for walk-in customer" />
         </div>
         <div className="form-group">
           <label className="form-label">Phone</label>

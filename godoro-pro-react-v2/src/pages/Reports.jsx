@@ -39,18 +39,39 @@ export default function Reports() {
     (locationId === 'all' || String(e.locationId) === String(locationId)) && inPeriod(e.date)
   ));
 
+  // MUHIMU: "Revenue" (Mauzo Yote) ni jumla ya mauzo yote yaliyofanyika,
+  // hata yale ambayo bado ni deni (Debt) - kwa taarifa tu, si faida.
   const revenue = filteredSales.reduce((sum, s) => sum + (s.total || 0), 0);
+
+  // Faida (Profit) HAIPASWI kuhesabu pesa ambayo bado haijalipwa (madeni).
+  // Kwa hiyo tunachukua mauzo yaliyolipwa kikamilifu (status === 'Paid')
+  // pekee, kisha tunatoa gharama ya bidhaa yenyewe (unit_cost - bei ya
+  // ununuzi) kabla ya kutoa expenses. Hii ndiyo faida halisi.
+  const paidSales = filteredSales.filter(s => s.status === 'Paid');
+  const cashCollected = paidSales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const costOfGoodsSold = paidSales.reduce((sum, s) => sum + (s.unitCost || 0) * (s.quantity || 1), 0);
+  const grossProfit = cashCollected - costOfGoodsSold;
+
+  // Madeni ambayo bado hayajalipwa kwa kipindi hiki - yanaonyeshwa kama
+  // taarifa tu (hayahesabiwi kwenye faida mpaka mteja atakapolipa).
+  const unpaidInPeriod = filteredSales
+    .filter(s => s.status !== 'Paid')
+    .reduce((sum, s) => sum + Math.max(0, (s.total || 0) - (s.paid || 0)), 0);
+
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const profit = revenue - totalExpenses;
+  const profit = grossProfit - totalExpenses;
 
   // Per-location breakdown (haiheshimu filter ya location - inaonyesha zote kila mara)
   const perLocation = useMemo(() => {
     return locations.map(loc => {
       const locSales = sales.filter(s => String(s.locationId) === String(loc.id) && inPeriod(s.date));
+      const locPaidSales = locSales.filter(s => s.status === 'Paid');
       const locExpenses = expenses.filter(e => String(e.locationId) === String(loc.id) && inPeriod(e.date));
       const rev = locSales.reduce((sum, s) => sum + (s.total || 0), 0);
+      const cash = locPaidSales.reduce((sum, s) => sum + (s.total || 0), 0);
+      const cogs = locPaidSales.reduce((sum, s) => sum + (s.unitCost || 0) * (s.quantity || 1), 0);
       const exp = locExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-      return { ...loc, revenue: rev, expenses: exp, profit: rev - exp, count: locSales.length };
+      return { ...loc, revenue: rev, expenses: exp, profit: (cash - cogs) - exp, count: locSales.length };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locations, sales, expenses, period]);
@@ -60,16 +81,20 @@ export default function Reports() {
     const map = {};
     filteredSales.forEach(s => {
       if (!s.date) return;
-      map[s.date] = map[s.date] || { date: s.date, revenue: 0, expenses: 0 };
+      map[s.date] = map[s.date] || { date: s.date, revenue: 0, expenses: 0, cash: 0, cogs: 0 };
       map[s.date].revenue += s.total || 0;
+      if (s.status === 'Paid') {
+        map[s.date].cash += s.total || 0;
+        map[s.date].cogs += (s.unitCost || 0) * (s.quantity || 1);
+      }
     });
     filteredExpenses.forEach(e => {
       if (!e.date) return;
-      map[e.date] = map[e.date] || { date: e.date, revenue: 0, expenses: 0 };
+      map[e.date] = map[e.date] || { date: e.date, revenue: 0, expenses: 0, cash: 0, cogs: 0 };
       map[e.date].expenses += e.amount || 0;
     });
     return Object.values(map)
-      .map(d => ({ ...d, profit: d.revenue - d.expenses }))
+      .map(d => ({ ...d, profit: (d.cash - d.cogs) - d.expenses }))
       .sort((a, b) => b.date.localeCompare(a.date));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSales, filteredExpenses]);
@@ -98,9 +123,23 @@ export default function Reports() {
         <div className="manager-stat-card">
           <div className="bg-circle" style={{ background: '#e07b2a' }}></div>
           <div className="stat-icon" style={{ background: 'rgba(224,123,42,0.08)' }}>📈</div>
-          <div className="stat-label">Total Revenue</div>
+          <div className="stat-label">Total Sales (Invoiced)</div>
           <div className="stat-value">{fmtS(revenue)}</div>
-          <div className="stat-sub">{filteredSales.length} transactions</div>
+          <div className="stat-sub">{filteredSales.length} transactions (incl. unpaid debts)</div>
+        </div>
+        <div className="manager-stat-card">
+          <div className="bg-circle" style={{ background: '#2563eb' }}></div>
+          <div className="stat-icon" style={{ background: 'rgba(37,99,235,0.08)' }}>💵</div>
+          <div className="stat-label">Cash Collected</div>
+          <div className="stat-value">{fmtS(cashCollected)}</div>
+          <div className="stat-sub">{paidSales.length} fully-paid sales</div>
+        </div>
+        <div className="manager-stat-card">
+          <div className="bg-circle" style={{ background: '#f59e0b' }}></div>
+          <div className="stat-icon" style={{ background: 'rgba(245,158,11,0.08)' }}>🏭</div>
+          <div className="stat-label">Cost of Goods Sold</div>
+          <div className="stat-value">{fmtS(costOfGoodsSold)}</div>
+          <div className="stat-sub">Buy-price of paid sales only</div>
         </div>
         <div className="manager-stat-card">
           <div className="bg-circle" style={{ background: '#dc2626' }}></div>
@@ -110,11 +149,18 @@ export default function Reports() {
           <div className="stat-sub">{filteredExpenses.length} expense records</div>
         </div>
         <div className="manager-stat-card">
+          <div className="bg-circle" style={{ background: '#94a3b8' }}></div>
+          <div className="stat-icon" style={{ background: 'rgba(148,163,184,0.08)' }}>⏳</div>
+          <div className="stat-label">Unpaid Debts (This Period)</div>
+          <div className="stat-value" style={{ color: '#64748b' }}>{fmtS(unpaidInPeriod)}</div>
+          <div className="stat-sub">Not counted in profit until paid</div>
+        </div>
+        <div className="manager-stat-card">
           <div className="bg-circle" style={{ background: profit >= 0 ? '#16a34a' : '#dc2626' }}></div>
           <div className="stat-icon" style={{ background: 'rgba(22,163,74,0.08)' }}>💰</div>
           <div className="stat-label">Net Profit</div>
           <div className="stat-value" style={{ color: profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(profit)}</div>
-          <div className="stat-sub">Revenue − Expenses</div>
+          <div className="stat-sub">Cash Collected − Cost of Goods − Expenses</div>
         </div>
       </div>
 
