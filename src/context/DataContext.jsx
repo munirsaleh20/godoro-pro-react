@@ -151,16 +151,38 @@ export function DataProvider({ children }) {
     Array.from(new Set(products.map(p => (p.brand || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
   ), [products]);
 
-  // Inatafuta bidhaa kwenye stock ya location fulani inayolingana na jina+size
-  // (sawa na onSaleProductNameChange() kwenye HTML ya awali).
+  // Inatafuta bidhaa kwenye stock ya location fulani inayolingana na jina+size.
+  // Normalisation hii inaondoa nafasi (space), mistari (-), na dot ili
+  // "Vita Raha", "Vita  Raha", na "vitaraha" zote zilingane bidhaa moja -
+  // muhimu kwa wauzaji wasio wazoefu wanaoandika jina kwa mkono (chaguo "Other").
+  const norm = (s) => (s || '').toString().toLowerCase().replace(/[\s\-_.]+/g, '');
+
   const findMatchingProduct = useCallback((locationId, name, size) => {
     const list = getProducts(locationId);
-    const byNameAndSize = list.find(p =>
-      p.name.toLowerCase().trim() === name.toLowerCase().trim() &&
-      (!size || !p.size || p.size.trim() === size.trim())
-    );
-    if (byNameAndSize) return byNameAndSize;
-    return list.find(p => p.name.toLowerCase().trim() === name.toLowerCase().trim()) || null;
+    const nName = norm(name);
+    const nSize = norm(size);
+    if (!nName) return null;
+
+    // 1) Jina na size zinalingana kikamilifu (baada ya normalisation)
+    let found = list.find(p => norm(p.name) === nName && (!nSize || !p.size || norm(p.size) === nSize));
+    if (found) return found;
+
+    // 2) Jina pekee linalingana kikamilifu
+    found = list.find(p => norm(p.name) === nName);
+    if (found) return found;
+
+    // 3) Jina linakaribiana (mfano typo ndogo au sehemu ya jina) + size sahihi
+    found = list.find(p => {
+      const pn = norm(p.name);
+      return pn && (pn.includes(nName) || nName.includes(pn)) && (!nSize || !p.size || norm(p.size) === nSize);
+    });
+    if (found) return found;
+
+    // 4) Jina linakaribiana tu, bila kujali size
+    return list.find(p => {
+      const pn = norm(p.name);
+      return pn && (pn.includes(nName) || nName.includes(pn));
+    }) || null;
   }, [getProducts]);
 
   // ---------------- Debts ----------------
@@ -266,6 +288,7 @@ export function DataProvider({ children }) {
         date: s.sale_date,
         items: s.items,
         unitPrice: s.unit_price || 0,
+        unitCost: s.unit_cost || 0,
         quantity: s.quantity || 1,
         total: s.total || 0,
         paid: s.paid || 0,
@@ -285,7 +308,7 @@ export function DataProvider({ children }) {
   const addSale = useCallback(async (payload) => {
     const { locationId, staffId, customer, phone, productId, displayName, manualPrice, quantity, method, paid } = payload;
 
-    let unitPrice, total, matchedProduct = null;
+    let unitPrice, total, unitCost = 0, matchedProduct = null;
 
     if (productId) {
       matchedProduct = products.find(p => String(p.id) === String(productId));
@@ -294,6 +317,7 @@ export function DataProvider({ children }) {
         throw new Error(`Insufficient stock! Available: ${matchedProduct.stock}`);
       }
       unitPrice = matchedProduct.sell;
+      unitCost = matchedProduct.buy || 0;
       total = unitPrice * quantity;
     } else {
       if (!manualPrice || manualPrice <= 0) throw new Error('Please enter the selling price.');
@@ -312,6 +336,7 @@ export function DataProvider({ children }) {
       customer_phone: phone || null,
       items,
       unit_price: unitPrice,
+      unit_cost: unitCost,
       quantity,
       total,
       paid,
@@ -333,7 +358,7 @@ export function DataProvider({ children }) {
 
     const saleRecord = {
       id: newSale.id, locationId, staffId, customer, phone: phone || '',
-      date: saleDate, items, unitPrice, quantity, total, paid, status, method,
+      date: saleDate, items, unitPrice, unitCost, quantity, total, paid, status, method,
     };
     setSales(prev => [saleRecord, ...prev]);
 

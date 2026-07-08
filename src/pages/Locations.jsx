@@ -4,13 +4,14 @@ import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import Modal from '../components/Modal.jsx';
+import StoreProductsModal from '../components/StoreProductsModal.jsx';
 
 const EMPTY_FORM = { name: '', location: '', type: 'store', phone: '', email: '' };
 
 export default function Locations({ type }) {
   // type: 'store' | 'shop'
   const { isManager } = useAuth();
-  const { stores, shops, addLocation, updateLocation, deleteLocation } = useData();
+  const { stores, shops, addLocation, updateLocation, deleteLocation, getProducts } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
@@ -23,6 +24,7 @@ export default function Locations({ type }) {
   const [form, setForm] = useState({ ...EMPTY_FORM, type });
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState('');
+  const [viewingLocation, setViewingLocation] = useState(null);
 
   if (!isManager()) {
     return (
@@ -107,6 +109,7 @@ export default function Locations({ type }) {
             </div>
             <div className="store-footer">{loc.phone || 'No phone'} {loc.email ? `• ${loc.email}` : ''}</div>
             <div className="card-actions">
+              <button className="btn-ghost small" style={{ color: '#0d9488' }} onClick={() => setViewingLocation(loc)}>📋 View Products</button>
               <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => openEdit(loc)}>✏️ Edit</button>
               <button className="btn-ghost small" style={{ color: '#dc2626' }} onClick={() => handleDelete(loc)}>🗑️ Delete</button>
             </div>
@@ -146,6 +149,13 @@ export default function Locations({ type }) {
           </button>
         </div>
       </Modal>
+
+      <StoreProductsModal
+        open={!!viewingLocation}
+        location={viewingLocation}
+        products={viewingLocation ? getProducts(viewingLocation.id) : []}
+        onClose={() => setViewingLocation(null)}
+      />
     </div>
   );
 }

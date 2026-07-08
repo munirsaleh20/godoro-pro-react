@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 // Foundation phase: dashboard + stores + shops tu.
 // Kurasa nyingine (sales, products, staff, debts, expenses, profit)
 // zitaongezwa hatua zijazo na kuongezwa hapa.
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { key: 'dashboard', label: '🏠 Dashboard', roles: ['owner', 'manager', 'salesperson'] },
   { key: 'sales', label: '🛒 Sales', roles: ['owner', 'manager', 'salesperson'] },
   { key: 'debts', label: '💳 Debts', roles: ['owner', 'manager', 'salesperson'] },
