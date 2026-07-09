@@ -95,6 +95,7 @@ button, input, select { font-family: inherit; }
 }
 .btn-ghost:hover { background: #f1f5f9; }
 .btn-ghost.small { padding: 4px 8px; font-size: 11px; }
+.btn-primary.small { padding: 4px 10px; font-size: 11px; }
 
 /* Forms */
 .form-group { margin-bottom: 14px; }

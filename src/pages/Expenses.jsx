@@ -70,7 +70,7 @@ export default function Expenses() {
         <h3 className="section-title">
           💸 Expenses — {isManager() ? 'All Locations' : `Your Shop: ${myShop.name}`} · Total: {fmtS(isManager() ? totalAllExpenses : total)}
         </h3>
-        <button className="btn-primary" onClick={openAdd}>+ Add Expense</button>
+        {isManager() && <button className="btn-primary" onClick={openAdd}>+ Add Expense</button>}
       </div>
 
       <div className="table-container" style={{ overflowX: 'auto' }}>
@@ -90,7 +90,7 @@ export default function Expenses() {
                 <th style={{ padding: 8 }}>Description</th>
                 <th style={{ padding: 8 }}>Paid To</th>
                 <th style={{ padding: 8 }}>Amount</th>
-                <th style={{ padding: 8 }}>Action</th>
+                {isManager() && <th style={{ padding: 8 }}>Action</th>}
               </tr>
             </thead>
             <tbody>
@@ -102,10 +102,12 @@ export default function Expenses() {
                   <td style={{ padding: 8 }}>{e.desc}</td>
                   <td style={{ padding: 8 }}>{e.to || 'N/A'}</td>
                   <td style={{ padding: 8, color: '#dc2626', fontWeight: 700 }}>{fmtS(e.amount)}</td>
-                  <td style={{ padding: 8 }}>
-                    <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => openEdit(e)}>✏️</button>
-                    <button className="btn-ghost small" style={{ color: '#dc2626', marginLeft: 4 }} onClick={() => handleDelete(e)}>🗑️</button>
-                  </td>
+                  {isManager() && (
+                    <td style={{ padding: 8 }}>
+                      <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => openEdit(e)}>✏️</button>
+                      <button className="btn-ghost small" style={{ color: '#dc2626', marginLeft: 4 }} onClick={() => handleDelete(e)}>🗑️</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -113,7 +115,7 @@ export default function Expenses() {
               <tr style={{ borderTop: '2px solid #1a1a2e', background: '#f8fafc' }}>
                 <td colSpan={isManager() ? 5 : 4} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total:</td>
                 <td style={{ padding: 8, fontWeight: 900, color: '#dc2626' }}>{fmtS(total)}</td>
-                <td></td>
+                {isManager() && <td></td>}
               </tr>
             </tfoot>
           </table>

@@ -1,17 +1,35 @@
 import { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
 import { useData } from '../context/DataContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 
-// mode: 'add' | 'edit' (edit inaruhusu kubadilisha role/location tu, si password)
+// mode: 'add' | 'edit'
+// Kwenye 'edit', Owner (pekee) anaweza pia "Set New Password" kwa
+// Manager/Salesperson. Haiwezekani "kuona" password ya sasa (imefichwa
+// milele kwa hashing - hii ni kanuni ya usalama ya mifumo yote), hivyo
+// tunatoa uwezo wa kuweka password MPYA badala yake.
 export default function StaffFormModal({ open, mode, initial, onClose, onSubmit }) {
-  const { locations } = useData();
+  const { locations, resetStaffPassword } = useData();
+  const { isOwner, currentUser } = useAuth();
+  const { showToast } = useToast();
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'salesperson', locationId: '' });
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [showPwSection, setShowPwSection] = useState(false);
+  const [newPw, setNewPw] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwErr, setPwErr] = useState('');
+
   useEffect(() => {
     if (!open) return;
     setErr('');
+    setShowPwSection(false);
+    setNewPw('');
+    setShowPw(false);
+    setPwErr('');
     if (mode === 'edit' && initial) {
       setForm({ name: initial.name, email: initial.email, password: '', role: initial.role, locationId: initial.locationId || '' });
     } else {
@@ -44,6 +62,35 @@ export default function StaffFormModal({ open, mode, initial, onClose, onSubmit 
       setSaving(false);
     }
   };
+
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    let pw = '';
+    for (let i = 0; i < 8; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+    setNewPw(pw);
+    setShowPw(true);
+  };
+
+  const handleSetPassword = async () => {
+    setPwErr('');
+    if (!newPw || newPw.length < 6) {
+      setPwErr('Password must be at least 6 characters');
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await resetStaffPassword(initial.id, newPw);
+      showToast(`✅ Password updated for ${initial.name}. Make sure to share it with them securely.`);
+      setShowPwSection(false);
+      setNewPw('');
+    } catch (e) {
+      setPwErr(e.message);
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  const canChangePassword = mode === 'edit' && initial && isOwner() && initial.id !== currentUser?.id && initial.role !== 'owner';
 
   return (
     <Modal open={open} title={mode === 'add' ? '👥 Add Staff' : '✏️ Edit Staff'} onClose={onClose}>
@@ -95,6 +142,45 @@ export default function StaffFormModal({ open, mode, initial, onClose, onSubmit 
           {saving ? 'Saving...' : mode === 'add' ? '+ Add Staff' : '💾 Save Changes'}
         </button>
       </div>
+
+      {canChangePassword && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
+          {!showPwSection ? (
+            <button className="btn-ghost small" style={{ color: '#7c3aed' }} onClick={() => setShowPwSection(true)}>
+              🔑 Set New Password
+            </button>
+          ) : (
+            <div>
+              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>
+                For security, existing passwords can never be viewed or recovered — this
+                sets a brand-new password for <strong>{initial.name}</strong>. Share it with
+                them directly and securely (e.g. in person or a private message).
+              </div>
+              {pwErr && <div className="form-error">{pwErr}</div>}
+              <div className="form-group" style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="form-input"
+                  type={showPw ? 'text' : 'password'}
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  placeholder="New password (min 6 characters)"
+                  style={{ flex: 1 }}
+                />
+                <button type="button" className="btn-ghost small" onClick={() => setShowPw(!showPw)}>
+                  {showPw ? '🙈 Hide' : '👁️ Show'}
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className="btn-ghost small" onClick={generatePassword}>🎲 Generate</button>
+                <button className="btn-ghost small" onClick={() => { setShowPwSection(false); setNewPw(''); setPwErr(''); }}>Cancel</button>
+                <button className="btn-primary small" onClick={handleSetPassword} disabled={pwSaving}>
+                  {pwSaving ? 'Saving...' : '💾 Save New Password'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </Modal>
   );
 }

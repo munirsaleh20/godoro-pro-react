@@ -134,3 +134,33 @@ create policy "Authenticated users can insert transfers"
 Kama tayari una RLS policies maalum kwenye majedwali mengine (kwa mfano
 kuzuia salesperson kuona data za maeneo mengine), rekebisha hizi policies
 zifuate muundo uleule.
+
+## ⚠️ Hatua ya ZIADA: Washa Realtime kwenye Supabase (Live Sync)
+
+Ili Owner na Manager (na Salesperson) waone mabadiliko ya kila mmoja papo
+hapo bila kureload page (mfano: Owner akiongeza mauzo, Manager anaona
+mara moja), tumeongeza Supabase Realtime.
+
+Nenda Supabase Dashboard → **Database → Replication**, kisha washa
+("enable") replication kwa majedwali haya:
+
+- `sales`
+- `expenses`
+- `products`
+- `debts`
+- `transfers`
+
+Bila hatua hii, app itaendelea kufanya kazi vizuri lakini mtumiaji atahitaji
+ku-refresh page kuona mabadiliko ya mtu mwingine (badala ya kuonekana papo
+hapo kiotomatiki).
+
+## 🔒 Ushauri wa ziada: Imarisha RLS kwa Salesperson (usalama wa ziada)
+
+Tumeondoa vitufe vya Edit/Delete kwenye interface (UI) kwa Salesperson
+(kwenye Sales, Expenses, na Debts) - wanaruhusiwa "New Sale" na
+kutafuta/kuona tu. Hata hivyo, kizuizi hiki ni cha UI pekee; kwa usalama
+kamili zaidi (kuzuia mtu mwenye ujuzi wa kiufundi kupitisha UI), ni vizuri
+pia kuweka RLS policies kwenye database zenyewe zinazozuia salesperson
+kufanya UPDATE/DELETE kwenye `sales`, `expenses`, na `debts` - ukiwa tayari,
+niambie na nitakuandalia SQL husika inayolingana na muundo wako wa sasa wa
+RLS.

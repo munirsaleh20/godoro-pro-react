@@ -102,6 +102,31 @@ Deno.serve(async (req) => {
       return json({ success: true });
     }
 
+    // Owner pekee anaweza kubadilisha password ya Manager au Salesperson.
+    // KUMBUKA: haiwezekani "kuona" password iliyopo ya sasa - Supabase
+    // (kama mfumo wowote salama) hai-hifadhi password kwa namna
+    // inayosomeka, ni hashed tu. Kinachowezekana ni ku-SET password mpya.
+    if (body.action === 'reset-password') {
+      const { staffId, newPassword } = body;
+      if (!staffId || !newPassword) return json({ error: 'Missing staffId or newPassword' }, 400);
+      if (newPassword.length < 6) return json({ error: 'Password must be at least 6 characters' }, 400);
+      if (callerStaff.role !== 'owner') {
+        return json({ error: 'Only the Owner can change another staff member\'s password' }, 403);
+      }
+
+      const { data: targetStaff, error: targetErr } = await admin
+        .from('staff').select('role').eq('id', staffId).single();
+      if (targetErr || !targetStaff) return json({ error: 'Staff member not found' }, 404);
+      if (targetStaff.role === 'owner' && staffId !== caller.id) {
+        return json({ error: 'Cannot change another Owner\'s password' }, 403);
+      }
+
+      const { error: updErr } = await admin.auth.admin.updateUserById(staffId, { password: newPassword });
+      if (updErr) return json({ error: updErr.message }, 400);
+
+      return json({ success: true });
+    }
+
     return json({ error: 'Unknown action' }, 400);
   } catch (err) {
     return json({ error: err.message || 'Internal error' }, 500);
