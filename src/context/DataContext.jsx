@@ -4,6 +4,21 @@ import { today } from '../utils/format.js';
 
 const DataContext = createContext(null);
 
+// TATIZO LILILOKUWEPO: kila operesheni ya kuongeza (mauzo, deni, matumizi,
+// bidhaa, n.k.) ilikuwa ikifanya vitu VIWILI kwa wakati mmoja: (1) inaongeza
+// kumbukumbu mpya moja kwa moja kwenye 'state' ya screen (optimistic update),
+// NA (2) mfumo wa "Live Sync" (realtime) ulikuwa ukisikia mabadiliko yale
+// yale kwenye database na kupakua upya orodha NZIMA (loadXxx()). Ikiwa hizo
+// mbili zilifika kwa mpangilio fulani (mfano reload ikimaliza BAADA ya
+// optimistic update), kumbukumbu ileile ya mauzo/deni iliishia kuongezwa
+// MARA MBILI kwenye screen - ndiyo maana "debts 2 zilionekana kama 4".
+// Fix: kabla ya kuongeza kwenye 'state', tunahakiki kwanza kama ID hiyo
+// tayari ipo - kama ipo, hatuiongezi tena.
+function addUnique(prev, item, prepend = true) {
+  if (prev.some(x => String(x.id) === String(item.id))) return prev;
+  return prepend ? [item, ...prev] : [...prev, item];
+}
+
 // Hatua hii: locations + products (inventory) + sales + debts.
 // Staff, expenses zitaongezwa hatua zijazo.
 export function DataProvider({ children }) {
@@ -50,10 +65,10 @@ export function DataProvider({ children }) {
       .select()
       .single();
     if (error) throw new Error(error.message);
-    setLocations(prev => [...prev, {
+    setLocations(prev => addUnique(prev, {
       id: data.id, name: data.name, location: data.location,
       type: data.type, phone: data.phone, email: data.email,
-    }]);
+    }, false));
     return data;
   }, []);
 
@@ -109,7 +124,7 @@ export function DataProvider({ children }) {
       size: data.size || '', brand: data.brand || '', buy: data.buy_price || 0,
       sell: data.sell_price || 0, stock: data.stock || 0, cat: data.category || 'Spring',
     };
-    setProducts(prev => [...prev, product]);
+    setProducts(prev => addUnique(prev, product, false));
     return product;
   }, []);
 
@@ -228,11 +243,11 @@ export function DataProvider({ children }) {
       is_paid: false,
     }).select().single();
     if (error) { console.error('createDebtForSale error:', error); return; }
-    setDebts(prev => [{
+    setDebts(prev => addUnique(prev, {
       id: data.id, saleId: data.sale_id, locationId: data.location_id,
       customer: data.customer_name, phone: data.customer_phone || '',
       amount: data.amount || 0, date: data.date, due: data.due_date,
-    }, ...prev]);
+    }));
   }, []);
 
   const markDebtPaid = useCallback(async (debtId) => {
@@ -252,6 +267,44 @@ export function DataProvider({ children }) {
     }
 
     setDebts(prev => prev.filter(d => String(d.id) !== String(debtId)));
+  }, [debts, sales]);
+
+  // Inarekodi malipo ya SEHEMU (partial payment) kwa deni fulani - mfano
+  // mteja mwenye deni la TZS 100,000 analipa TZS 40,000 leo, inabaki
+  // TZS 60,000. Ikiwa malipo yanafunika deni lote (au zaidi kidogo kwa
+  // makosa ya kuzungusha nambari), deni linafungwa kiotomatiki kama
+  // markDebtPaid.
+  const recordDebtPayment = useCallback(async (debtId, paymentAmount) => {
+    const debt = debts.find(d => String(d.id) === String(debtId));
+    if (!debt) throw new Error('Debt not found');
+    const amount = Number(paymentAmount) || 0;
+    if (amount <= 0) throw new Error('Enter an amount greater than zero');
+    if (amount > debt.amount + 0.01) throw new Error(`Payment cannot exceed the remaining balance (${debt.amount})`);
+
+    const sale = sales.find(s => String(s.id) === String(debt.saleId));
+    const newBalance = Math.max(0, debt.amount - amount);
+    const newPaid = (sale?.paid || 0) + amount;
+
+    if (newBalance <= 0.01) {
+      // Deni limefungwa kikamilifu
+      const { error } = await sb.from('debts').update({ is_paid: true }).eq('id', debtId);
+      if (error) throw new Error(error.message);
+      if (sale) {
+        await sb.from('sales').update({ paid: sale.total, status: 'Paid' }).eq('id', sale.id);
+        setSales(prev => prev.map(s => (String(s.id) === String(sale.id) ? { ...s, paid: s.total, status: 'Paid' } : s)));
+      }
+      setDebts(prev => prev.filter(d => String(d.id) !== String(debtId)));
+      return { fullyPaid: true, remaining: 0 };
+    }
+
+    const { error } = await sb.from('debts').update({ amount: newBalance }).eq('id', debtId);
+    if (error) throw new Error(error.message);
+    if (sale) {
+      await sb.from('sales').update({ paid: newPaid }).eq('id', sale.id);
+      setSales(prev => prev.map(s => (String(s.id) === String(sale.id) ? { ...s, paid: newPaid } : s)));
+    }
+    setDebts(prev => prev.map(d => (String(d.id) === String(debtId) ? { ...d, amount: newBalance } : d)));
+    return { fullyPaid: false, remaining: newBalance };
   }, [debts, sales]);
 
   const deleteDebt = useCallback(async (id) => {
@@ -360,7 +413,7 @@ export function DataProvider({ children }) {
       id: newSale.id, locationId, staffId, customer, phone: phone || '',
       date: saleDate, items, unitPrice, unitCost, quantity, total, paid, status, method,
     };
-    setSales(prev => [saleRecord, ...prev]);
+    setSales(prev => addUnique(prev, saleRecord));
 
     // Kama kuna deni, tengeneza rekodi kwenye debts kiotomatiki
     if (status === 'Debt') {
@@ -493,7 +546,7 @@ export function DataProvider({ children }) {
       id: s.id, name: s.name, email: s.email,
       avatar: s.avatar, role: s.role, locationId: s.location_id,
     };
-    setStaff(prev => [...prev, newStaff]);
+    setStaff(prev => addUnique(prev, newStaff, false));
     return newStaff;
   }, []);
 
@@ -583,7 +636,7 @@ export function DataProvider({ children }) {
       cat: data.category, desc: data.description || '', amount: data.amount || 0,
       to: data.paid_to || '',
     };
-    setExpenses(prev => [expense, ...prev]);
+    setExpenses(prev => addUnique(prev, expense));
     return expense;
   }, []);
 
@@ -696,7 +749,7 @@ export function DataProvider({ children }) {
       id: data.id, fromLocationId: data.from_location_id, toLocationId: data.to_location_id,
       note: data.note || '', items: data.items || [], date: (data.created_at || '').split('T')[0],
     };
-    setTransfers(prev => [transfer, ...prev]);
+    setTransfers(prev => addUnique(prev, transfer));
     return transfer;
   }, [products, updateProduct, addProduct]);
 
@@ -741,7 +794,7 @@ export function DataProvider({ children }) {
     sales, salesLoading, allSalesWithLocations, getSales, totalAllSales,
     loadSales, addSale, updateSale, deleteSale,
     debts, debtsLoading, allDebtsWithLocations, getDebts, totalAllDebts,
-    loadDebts, markDebtPaid, deleteDebt,
+    loadDebts, markDebtPaid, recordDebtPayment, deleteDebt,
     staff, staffLoading, staffWithLocations, getStaffName,
     loadStaff, createStaff, updateStaff, deleteStaff, resetStaffPassword,
     expenses, expensesLoading, allExpensesWithLocations, getExpenses, totalAllExpenses,

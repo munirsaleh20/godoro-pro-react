@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import { fmtS } from '../utils/format.js';
+import DebtDetailModal from '../components/DebtDetailModal.jsx';
 
 export default function Debts() {
   const { currentUser, isManager } = useAuth();
@@ -11,6 +12,7 @@ export default function Debts() {
   const { showToast } = useToast();
   const confirmAction = useConfirm();
   const [search, setSearch] = useState('');
+  const [viewingDebt, setViewingDebt] = useState(null);
 
   // Salesperson anaona deni za duka lake pekee
   let list = isManager()
@@ -85,6 +87,7 @@ export default function Debts() {
                 <th style={{ padding: 8 }}>Phone</th>
                 {isManager() && <th style={{ padding: 8 }}>Location</th>}
                 <th style={{ padding: 8 }}>Amount Owed</th>
+                <th style={{ padding: 8 }}>Details</th>
                 {isManager() && <th style={{ padding: 8 }}>Action</th>}
               </tr>
             </thead>
@@ -96,6 +99,9 @@ export default function Debts() {
                   <td style={{ padding: 8 }}>{d.phone || 'N/A'}</td>
                   {isManager() && <td style={{ padding: 8 }}>{d.locationIcon} {d.locationName}</td>}
                   <td style={{ padding: 8, color: '#dc2626', fontWeight: 700 }}>{fmtS(d.amount)}</td>
+                  <td style={{ padding: 8 }}>
+                    <button className="btn-ghost small" style={{ color: '#0d9488' }} onClick={() => setViewingDebt(d)}>👁️ View</button>
+                  </td>
                   {isManager() && (
                     <td style={{ padding: 8 }}>
                       <button className="btn-ghost small" style={{ color: '#16a34a' }} onClick={() => handleMarkPaid(d)}>✅ Mark Paid</button>
@@ -107,14 +113,17 @@ export default function Debts() {
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid #1a1a2e', background: '#f8fafc' }}>
-                <td colSpan={isManager() ? 4 : 3} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total:</td>
+                <td colSpan={isManager() ? 5 : 4} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total:</td>
                 <td style={{ padding: 8, fontWeight: 900, color: '#dc2626' }}>{fmtS(total)}</td>
+                <td></td>
                 {isManager() && <td></td>}
               </tr>
             </tfoot>
           </table>
         )}
       </div>
+
+      <DebtDetailModal open={!!viewingDebt} debt={viewingDebt} onClose={() => setViewingDebt(null)} />
     </div>
   );
 }
