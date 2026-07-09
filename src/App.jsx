@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from './context/AuthContext.jsx';
 import { useData } from './context/DataContext.jsx';
 import { useToast } from './context/ToastContext.jsx';
@@ -14,21 +14,66 @@ import Expenses from './pages/Expenses.jsx';
 import Transfers from './pages/Transfers.jsx';
 import Reports from './pages/Reports.jsx';
 
+const VALID_PAGES = [
+  'dashboard', 'sales', 'inventory', 'staff', 'debts',
+  'expenses', 'transfers', 'reports', 'stores', 'shops',
+];
+
+// Inasoma ukurasa wa sasa kutoka kwenye URL (#debts, #sales, n.k.) ili
+// mtumiaji akifanya refresh (F5), abaki kwenye ukurasa aliokuwepo badala
+// ya kurudishwa Dashboard kila wakati.
+function pageFromHash() {
+  const h = window.location.hash.replace('#', '');
+  return VALID_PAGES.includes(h) ? h : 'dashboard';
+}
+
 export default function App() {
   const { currentUser, authLoading } = useAuth();
   const { loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers } = useData();
   const { showToast } = useToast();
-  const [page, setPage] = useState('dashboard');
+  const [page, setPageState] = useState(pageFromHash);
   const [dataLoading, setDataLoading] = useState(false);
 
-  // BUG FIX: kabla ya hapa, ukurasa (page) uliobaki kuwa uleule (mfano "staff")
-  // hata baada ya mtumiaji mmoja ku-logout na mwingine (mwenye role tofauti,
+  // Kubadilisha ukurasa daima kunasasisha URL hash pia, ili refresh iweze
+  // kubaki hapohapo.
+  const setPage = (key) => {
+    setPageState(key);
+    window.location.hash = key;
+  };
+
+  // Endapo mtumiaji anatumia vitufe vya "back/forward" vya browser.
+  useEffect(() => {
+    const onHashChange = () => setPageState(pageFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  // BUG FIX (asili): ukurasa uliobaki kuwa uleule (mfano "staff") hata
+  // baada ya mtumiaji mmoja ku-logout na mwingine (mwenye role tofauti,
   // mfano salesperson) ku-login kwenye kifaa/tab kilekile - ndio maana
   // "Access Denied" ilionekana mara moja baada ya login bila hata kubofya
-  // Staff. Sasa page inarudi "dashboard" kila mtumiaji anapobadilika.
+  // Staff. Sasa page inarudi "dashboard" MTUMIAJI ANAPOBADILIKA KWELI
+  // (logout + login mwingine) - LAKINI si wakati wa refresh ya kawaida ya
+  // ukurasa (hapo tunataka abaki pale pale, ndiyo maana tunatumia
+  // hasHydrated hapa chini kuruka mzunguko wa kwanza wa uthibitisho).
+  const hasHydratedRef = useRef(false);
+  const prevUserIdRef = useRef(undefined);
   useEffect(() => {
-    setPage('dashboard');
-  }, [currentUser?.id]);
+    if (authLoading) return; // bado tunathibitisha session ya awali, subiri
+    if (!hasHydratedRef.current) {
+      // Huu ni uthibitisho wa kwanza baada ya refresh/kufungua app -
+      // acha ukurasa uliopo (kutoka hash) uendelee kama ulivyo.
+      hasHydratedRef.current = true;
+      prevUserIdRef.current = currentUser?.id;
+      return;
+    }
+    if (prevUserIdRef.current !== currentUser?.id) {
+      // Mtumiaji halisi amebadilika (login/logout/mtumiaji mwingine) -
+      // rudisha Dashboard kwa usalama.
+      setPage('dashboard');
+    }
+    prevUserIdRef.current = currentUser?.id;
+  }, [currentUser?.id, authLoading]);
 
   // Ulinzi wa ziada: kama kwa sababu yoyote page ya sasa si miongoni mwa
   // kurasa zinazoruhusiwa kwa role ya mtumiaji huyu, mrudishe dashboard
