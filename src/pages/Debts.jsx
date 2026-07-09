@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import { fmtS } from '../utils/format.js';
+import { matchesSearch } from '../utils/search.js';
 import DebtDetailModal from '../components/DebtDetailModal.jsx';
 
 export default function Debts() {
@@ -20,8 +21,7 @@ export default function Debts() {
     : allDebtsWithLocations.filter(d => String(d.locationId) === String(currentUser.locationId));
 
   if (search.trim()) {
-    const s = search.toLowerCase().trim();
-    list = list.filter(d => d.customer.toLowerCase().includes(s) || (d.phone || '').includes(s));
+    list = list.filter(d => matchesSearch([d.customer, d.phone], search));
   }
 
   const total = list.reduce((sum, d) => sum + (d.amount || 0), 0);

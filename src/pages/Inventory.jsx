@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import { fmt } from '../utils/format.js';
+import { matchesSearch } from '../utils/search.js';
 import ProductFormModal from '../components/ProductFormModal.jsx';
 
 export default function Inventory() {
@@ -22,12 +23,7 @@ export default function Inventory() {
   if (filter === 'store') list = list.filter(p => p.locationType === 'store');
   if (filter === 'shop') list = list.filter(p => p.locationType === 'shop');
   if (search.trim()) {
-    const s = search.toLowerCase().trim();
-    list = list.filter(p =>
-      p.name.toLowerCase().includes(s) ||
-      (p.brand || '').toLowerCase().includes(s) ||
-      (p.cat || '').toLowerCase().includes(s)
-    );
+    list = list.filter(p => matchesSearch([p.name, p.size, p.brand, p.cat], search));
   }
 
   const totalStock = allProductsWithLocations.reduce((sum, p) => sum + p.stock, 0);

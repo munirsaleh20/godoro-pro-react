@@ -1,19 +1,16 @@
 import { useState } from 'react';
 import { useData } from '../context/DataContext.jsx';
 import { fmtS } from '../utils/format.js';
+import { matchesSearch } from '../utils/search.js';
 
 export default function ProductLocator() {
   const { allProductsWithLocations } = useData();
   const [search, setSearch] = useState('');
 
-  const s = search.trim().toLowerCase();
+  const s = search.trim();
   const results = s
     ? allProductsWithLocations
-        .filter(p =>
-          p.name.toLowerCase().includes(s) ||
-          (p.size || '').toLowerCase().includes(s) ||
-          (p.brand || '').toLowerCase().includes(s)
-        )
+        .filter(p => matchesSearch([p.name, p.size, p.brand], s))
         .sort((a, b) => b.stock - a.stock)
     : [];
 

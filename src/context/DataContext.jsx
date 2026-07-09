@@ -340,6 +340,7 @@ export function DataProvider({ children }) {
         phone: s.customer_phone || '',
         date: s.sale_date,
         items: s.items,
+        productId: s.product_id || null,
         unitPrice: s.unit_price || 0,
         unitCost: s.unit_cost || 0,
         quantity: s.quantity || 1,
@@ -388,6 +389,7 @@ export function DataProvider({ children }) {
       customer_name: customer,
       customer_phone: phone || null,
       items,
+      product_id: matchedProduct ? matchedProduct.id : null,
       unit_price: unitPrice,
       unit_cost: unitCost,
       quantity,
@@ -411,7 +413,8 @@ export function DataProvider({ children }) {
 
     const saleRecord = {
       id: newSale.id, locationId, staffId, customer, phone: phone || '',
-      date: saleDate, items, unitPrice, unitCost, quantity, total, paid, status, method,
+      date: saleDate, items, productId: matchedProduct ? matchedProduct.id : null,
+      unitPrice, unitCost, quantity, total, paid, status, method,
     };
     setSales(prev => addUnique(prev, saleRecord));
 
@@ -456,15 +459,48 @@ export function DataProvider({ children }) {
   }, [debts, sales, createDebtForSale]);
 
   const deleteSale = useCallback(async (id) => {
-    const { error } = await sb.from('sales').delete().eq('id', id);
+    const saleToDelete = sales.find(s => String(s.id) === String(id));
+
+    // MUHIMU: tunaongeza .select() baada ya delete ili tujue ni rekodi
+    // ngapi HALISI zilizofutwa kwenye database. Bila hii, kama RLS
+    // (ruhusa za database) hazimruhusu huyu mtumiaji kufuta, Supabase
+    // hairudishi error - inarudisha tu orodha tupu (rows 0), na screen
+    // ingeonekana "imefutwa" ilhali kwenye database bado ipo (ndiyo maana
+    // ilikuwa inaonekana tena kwa salesperson au baada ya kulogout/login).
+    const { data: deletedRows, error } = await sb.from('sales').delete().eq('id', id).select();
     if (error) throw new Error(error.message);
+    if (!deletedRows || deletedRows.length === 0) {
+      throw new Error('Huna ruhusa ya kufuta mauzo haya (au tayari yamefutwa). Owner na Manager tu ndio wanaruhusiwa.');
+    }
+
     setSales(prev => prev.filter(s => String(s.id) !== String(id)));
+
     const existingDebt = debts.find(d => String(d.saleId) === String(id));
     if (existingDebt) {
       await sb.from('debts').delete().eq('id', existingDebt.id);
       setDebts(prev => prev.filter(d => String(d.id) !== String(existingDebt.id)));
     }
-  }, [debts]);
+
+    // Rudisha stock ya bidhaa iliyouzwa (ikiwa sale hii ilitoka kwenye
+    // bidhaa iliyopo stock - si "manual price" sale isiyo na bidhaa maalum).
+    if (saleToDelete?.productId) {
+      const { data: prod, error: prodErr } = await sb.from('products')
+        .select('stock').eq('id', saleToDelete.productId).single();
+      if (!prodErr && prod) {
+        const newStock = (prod.stock || 0) + (saleToDelete.quantity || 0);
+        const { error: stockErr } = await sb.from('products')
+          .update({ stock: newStock, updated_at: new Date().toISOString() })
+          .eq('id', saleToDelete.productId);
+        if (!stockErr) {
+          setProducts(prev => prev.map(p => (
+            String(p.id) === String(saleToDelete.productId) ? { ...p, stock: newStock } : p
+          )));
+        } else {
+          console.error('Failed to restore stock after sale delete:', stockErr);
+        }
+      }
+    }
+  }, [sales, debts]);
 
   const getSales = useCallback((locationId) => (
     sales.filter(s => String(s.locationId) === String(locationId))
