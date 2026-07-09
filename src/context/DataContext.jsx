@@ -483,24 +483,41 @@ export function DataProvider({ children }) {
 
     // Rudisha stock ya bidhaa iliyouzwa (ikiwa sale hii ilitoka kwenye
     // bidhaa iliyopo stock - si "manual price" sale isiyo na bidhaa maalum).
+    //
+    // Kumbuka: tunatumia `products` (state iliyopo tayari kwenye kumbukumbu)
+    // badala ya kufanya request nyingine ya "select" kwenye database kabla
+    // ya "update" - hii inapunguza uwezekano wa RLS (ruhusa) kuzuia hatua
+    // ya kati kimya kimya. Pia tunaongeza .select() baada ya UPDATE ili
+    // tujue kama update HALISI imefanyika kwenye database (siyo tu
+    // kwenye screen).
     if (saleToDelete?.productId) {
-      const { data: prod, error: prodErr } = await sb.from('products')
-        .select('stock').eq('id', saleToDelete.productId).single();
-      if (!prodErr && prod) {
-        const newStock = (prod.stock || 0) + (saleToDelete.quantity || 0);
-        const { error: stockErr } = await sb.from('products')
+      const currentProduct = products.find(p => String(p.id) === String(saleToDelete.productId));
+      if (currentProduct) {
+        const newStock = (Number(currentProduct.stock) || 0) + (Number(saleToDelete.quantity) || 0);
+        const { data: updatedRows, error: stockErr } = await sb.from('products')
           .update({ stock: newStock, updated_at: new Date().toISOString() })
-          .eq('id', saleToDelete.productId);
-        if (!stockErr) {
-          setProducts(prev => prev.map(p => (
-            String(p.id) === String(saleToDelete.productId) ? { ...p, stock: newStock } : p
-          )));
-        } else {
+          .eq('id', saleToDelete.productId)
+          .select();
+
+        if (stockErr) {
           console.error('Failed to restore stock after sale delete:', stockErr);
+          throw new Error(`Sale imefutwa, LAKINI stock haikurudi: ${stockErr.message}`);
         }
+        if (!updatedRows || updatedRows.length === 0) {
+          // Update haikuathiri rekodi yoyote - kwa kawaida hii ni RLS
+          // (ruhusa ya UPDATE kwenye jedwali la products) inayozuia
+          // huyu mtumiaji kubadilisha bidhaa hii.
+          throw new Error('Sale imefutwa, LAKINI stock haikurudi kwa sababu huna ruhusa ya kubadilisha bidhaa hii (RLS kwenye jedwali la products). Muulize msimamizi wa mfumo aangalie UPDATE policy ya products.');
+        }
+
+        setProducts(prev => prev.map(p => (
+          String(p.id) === String(saleToDelete.productId) ? { ...p, stock: newStock } : p
+        )));
+      } else {
+        console.error('Stock restore skipped: bidhaa haikuonekana kwenye orodha ya sasa ya products (productId:', saleToDelete.productId, ')');
       }
     }
-  }, [sales, debts]);
+  }, [sales, debts, products]);
 
   const getSales = useCallback((locationId) => (
     sales.filter(s => String(s.locationId) === String(locationId))
