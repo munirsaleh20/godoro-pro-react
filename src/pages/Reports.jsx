@@ -39,17 +39,29 @@ export default function Reports() {
     (locationId === 'all' || String(e.locationId) === String(locationId)) && inPeriod(e.date)
   ));
 
-  // MUHIMU: "Revenue" (Mauzo Yote) ni jumla ya mauzo yote yaliyofanyika,
-  // hata yale ambayo bado ni deni (Debt) - kwa taarifa tu, si faida.
-  const revenue = filteredSales.reduce((sum, s) => sum + (s.total || 0), 0);
+  // MUHIMU: "Revenue" (Total Sales / Invoiced) sasa ni PESA HALISI
+  // ilizoingia mkononi tu - kwa mauzo yaliyolipwa kikamilifu tunachukua
+  // 'total', na kwa mauzo ya deni tunachukua kiasi kilicholipwa ('paid')
+  // pekee. Sehemu ya deni ambayo bado haijalipwa HAIHESABIWI hapa.
+  const actualPaidAmount = (s) => (s.status === 'Paid' ? (s.total || 0) : (s.paid || 0));
+  const revenue = filteredSales.reduce((sum, s) => sum + actualPaidAmount(s), 0);
 
   // Faida (Profit) HAIPASWI kuhesabu pesa ambayo bado haijalipwa (madeni).
-  // Kwa hiyo tunachukua mauzo yaliyolipwa kikamilifu (status === 'Paid')
-  // pekee, kisha tunatoa gharama ya bidhaa yenyewe (unit_cost - bei ya
-  // ununuzi) kabla ya kutoa expenses. Hii ndiyo faida halisi.
+  // "Cash Collected" ni PESA HALISI zilizoingia mkononi - inajumuisha
+  // mauzo yaliyolipwa kikamilifu NA sehemu iliyokwisha kulipwa kwenye
+  // mauzo ya deni (partial payments). Sehemu ya deni isiyolipwa haihesabiwi.
   const paidSales = filteredSales.filter(s => s.status === 'Paid');
-  const cashCollected = paidSales.reduce((sum, s) => sum + (s.total || 0), 0);
-  const costOfGoodsSold = paidSales.reduce((sum, s) => sum + (s.unitCost || 0) * (s.quantity || 1), 0);
+  const cashCollected = filteredSales.reduce((sum, s) => sum + actualPaidAmount(s), 0);
+  // COGS inahesabiwa kwa uwiano uleule wa kiasi kilicholipwa dhidi ya bei
+  // nzima ya mauzo - hii inahakikisha faida haizidishwi kwa kuhesabu pesa
+  // ya deni bila kutoa gharama husika ya bidhaa hiyo.
+  const costOfGoodsSold = filteredSales.reduce((sum, s) => {
+    const fullCost = (s.unitCost || 0) * (s.quantity || 1);
+    if (s.status === 'Paid') return sum + fullCost;
+    const total = s.total || 0;
+    const fraction = total > 0 ? (s.paid || 0) / total : 0;
+    return sum + fullCost * fraction;
+  }, 0);
   const grossProfit = cashCollected - costOfGoodsSold;
 
   // Madeni ambayo bado hayajalipwa kwa kipindi hiki - yanaonyeshwa kama
@@ -65,11 +77,16 @@ export default function Reports() {
   const perLocation = useMemo(() => {
     return locations.map(loc => {
       const locSales = sales.filter(s => String(s.locationId) === String(loc.id) && inPeriod(s.date));
-      const locPaidSales = locSales.filter(s => s.status === 'Paid');
       const locExpenses = expenses.filter(e => String(e.locationId) === String(loc.id) && inPeriod(e.date));
-      const rev = locSales.reduce((sum, s) => sum + (s.total || 0), 0);
-      const cash = locPaidSales.reduce((sum, s) => sum + (s.total || 0), 0);
-      const cogs = locPaidSales.reduce((sum, s) => sum + (s.unitCost || 0) * (s.quantity || 1), 0);
+      const rev = locSales.reduce((sum, s) => sum + actualPaidAmount(s), 0);
+      const cash = locSales.reduce((sum, s) => sum + actualPaidAmount(s), 0);
+      const cogs = locSales.reduce((sum, s) => {
+        const fullCost = (s.unitCost || 0) * (s.quantity || 1);
+        if (s.status === 'Paid') return sum + fullCost;
+        const total = s.total || 0;
+        const fraction = total > 0 ? (s.paid || 0) / total : 0;
+        return sum + fullCost * fraction;
+      }, 0);
       const exp = locExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
       return { ...loc, revenue: rev, expenses: exp, profit: (cash - cogs) - exp, count: locSales.length };
     });
@@ -82,10 +99,17 @@ export default function Reports() {
     filteredSales.forEach(s => {
       if (!s.date) return;
       map[s.date] = map[s.date] || { date: s.date, revenue: 0, expenses: 0, cash: 0, cogs: 0 };
-      map[s.date].revenue += s.total || 0;
-      if (s.status === 'Paid') {
-        map[s.date].cash += s.total || 0;
-        map[s.date].cogs += (s.unitCost || 0) * (s.quantity || 1);
+      map[s.date].revenue += actualPaidAmount(s);
+      map[s.date].cash += actualPaidAmount(s);
+      {
+        const fullCost = (s.unitCost || 0) * (s.quantity || 1);
+        if (s.status === 'Paid') {
+          map[s.date].cogs += fullCost;
+        } else {
+          const total = s.total || 0;
+          const fraction = total > 0 ? (s.paid || 0) / total : 0;
+          map[s.date].cogs += fullCost * fraction;
+        }
       }
     });
     filteredExpenses.forEach(e => {
@@ -125,14 +149,14 @@ export default function Reports() {
           <div className="stat-icon" style={{ background: 'rgba(224,123,42,0.08)' }}>📈</div>
           <div className="stat-label">Total Sales (Invoiced)</div>
           <div className="stat-value">{fmtS(revenue)}</div>
-          <div className="stat-sub">{filteredSales.length} transactions (incl. unpaid debts)</div>
+          <div className="stat-sub">{filteredSales.length} transactions (paid amounts only)</div>
         </div>
         <div className="manager-stat-card">
           <div className="bg-circle" style={{ background: '#2563eb' }}></div>
           <div className="stat-icon" style={{ background: 'rgba(37,99,235,0.08)' }}>💵</div>
           <div className="stat-label">Cash Collected</div>
           <div className="stat-value">{fmtS(cashCollected)}</div>
-          <div className="stat-sub">{paidSales.length} fully-paid sales</div>
+          <div className="stat-sub">{paidSales.length} fully-paid + partial payments</div>
         </div>
         <div className="manager-stat-card">
           <div className="bg-circle" style={{ background: '#f59e0b' }}></div>
