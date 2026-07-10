@@ -583,14 +583,39 @@ export function DataProvider({ children }) {
     return error?.message || fallback;
   };
 
+  // MUHIMU: getSession() peke yake wakati mwingine hurudisha access_token
+  // ambao TAYARI umeisha muda (expired) - hasa kama simu/tab ilikaa muda
+  // mrefu "backgrounded" (mfano Android inapofunga app kwenye background,
+  // timer ya auto-refresh ya supabase-js haifanyi kazi). getSession()
+  // haihakikishi token bado ni sahihi kwa Edge Function - ndiyo maana
+  // "create" ilikuwa inafanya kazi (muda mfupi baada ya login) lakini
+  // "delete" ikashindwa na 'Not authenticated' (dakika/saa kadhaa baadaye).
+  // Hii inalazimisha upya (refresh) session endapo token iko karibu
+  // kuisha au tayari imeisha, kabla ya kutuma ombi kwenye Edge Function.
+  const getFreshAccessToken = async () => {
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (error || !session) throw new Error('Session expired. Please login again.');
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expiresAt = session.expires_at || 0;
+    const isStale = !expiresAt || (expiresAt - nowSec) < 60; // <60s kubaki, ijilazimishe upya
+
+    if (!isStale) return session.access_token;
+
+    const { data: refreshed, error: refreshErr } = await sb.auth.refreshSession();
+    if (refreshErr || !refreshed?.session) {
+      throw new Error('Session expired. Please login again.');
+    }
+    return refreshed.session.access_token;
+  };
+
   // Inatumia Edge Function 'create-staff' (service role inabaki server-side,
   // si kwenye browser - tofauti na faili la HTML la awali).
   const createStaff = useCallback(async ({ name, email, password, role, locationId }) => {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Session expired. Please login again.');
+    const accessToken = await getFreshAccessToken();
     const { data, error } = await sb.functions.invoke('create-staff', {
       body: { action: 'create', name, email, password, role, locationId },
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (error) throw new Error(await extractFnError(error, 'Failed to create staff'));
     if (data?.error) throw new Error(data.error);
@@ -615,11 +640,10 @@ export function DataProvider({ children }) {
   }, []);
 
   const deleteStaff = useCallback(async (id) => {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Session expired. Please login again.');
+    const accessToken = await getFreshAccessToken();
     const { data, error } = await sb.functions.invoke('create-staff', {
       body: { action: 'delete', staffId: id },
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (error) throw new Error(await extractFnError(error, 'Failed to delete staff'));
     if (data?.error) throw new Error(data.error);
@@ -631,11 +655,10 @@ export function DataProvider({ children }) {
   // ndiyo sababu Staff.jsx/StaffFormModal huonyesha "Set New Password"
   // badala ya "View Password".)
   const resetStaffPassword = useCallback(async (staffId, newPassword) => {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Session expired. Please login again.');
+    const accessToken = await getFreshAccessToken();
     const { data, error } = await sb.functions.invoke('create-staff', {
       body: { action: 'reset-password', staffId, newPassword },
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (error) throw new Error(await extractFnError(error, 'Failed to change password'));
     if (data?.error) throw new Error(data.error);
