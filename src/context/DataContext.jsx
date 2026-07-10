@@ -884,6 +884,128 @@ export function DataProvider({ children }) {
     return transfer;
   }, [products, updateProduct, addProduct]);
 
+  // Kufuta uhamisho: "tengua" (reverse) athari yake - rudisha stock
+  // kwenye Store (chanzo) na punguza stock kwenye Shop (marudio).
+  // Transfers hazihifadhi productId - zinahifadhi jina+ukubwa+idadi tu,
+  // hivyo tunatafuta bidhaa inayolingana kwa jina+ukubwa kwenye eneo husika.
+  const deleteTransfer = useCallback(async (id) => {
+    const transfer = transfers.find(t => String(t.id) === String(id));
+    if (!transfer) throw new Error('Uhamisho haukupatikana.');
+
+    for (const it of (transfer.items || [])) {
+      const srcMatch = products.find(p => (
+        String(p.locationId) === String(transfer.fromLocationId) &&
+        p.name.trim().toLowerCase() === (it.name || '').trim().toLowerCase() &&
+        (p.size || '').trim().toLowerCase() === (it.size || '').trim().toLowerCase()
+      ));
+      if (srcMatch) {
+        await updateProduct(srcMatch.id, {
+          name: srcMatch.name, size: srcMatch.size, brand: srcMatch.brand,
+          buy: srcMatch.buy, sell: srcMatch.sell, cat: srcMatch.cat,
+          stock: srcMatch.stock + (it.quantity || 0),
+        });
+      }
+
+      const dstMatch = products.find(p => (
+        String(p.locationId) === String(transfer.toLocationId) &&
+        p.name.trim().toLowerCase() === (it.name || '').trim().toLowerCase() &&
+        (p.size || '').trim().toLowerCase() === (it.size || '').trim().toLowerCase()
+      ));
+      if (dstMatch) {
+        await updateProduct(dstMatch.id, {
+          name: dstMatch.name, size: dstMatch.size, brand: dstMatch.brand,
+          buy: dstMatch.buy, sell: dstMatch.sell, cat: dstMatch.cat,
+          stock: Math.max(0, dstMatch.stock - (it.quantity || 0)),
+        });
+      }
+    }
+
+    // MUHIMU: .select() baada ya delete ili tujue kama RLS iliruhusu
+    // kufuta HALISI (kama sales/expenses - Owner/Manager pekee).
+    const { data: deletedRows, error } = await sb.from('transfers').delete().eq('id', id).select();
+    if (error) throw new Error(error.message);
+    if (!deletedRows || deletedRows.length === 0) {
+      throw new Error('Huna ruhusa ya kufuta uhamisho huu (au tayari umefutwa). Owner na Manager tu ndio wanaruhusiwa.');
+    }
+
+    setTransfers(prev => prev.filter(t => String(t.id) !== String(id)));
+  }, [transfers, products, updateProduct]);
+
+  // Kuhariri uhamisho: tunahesabu tofauti (delta) ya stock inayohitajika
+  // kwa kila bidhaa/eneo - tunatengua idadi za zamani na kuweka idadi
+  // mpya kwa mkupuo mmoja (badala ya kutengua kisha kutuma upya), ili
+  // kuepuka "stock stale" kati ya hatua hizo mbili.
+  const updateTransfer = useCallback(async (id, { fromLocationId, toLocationId, note, items }) => {
+    const original = transfers.find(t => String(t.id) === String(id));
+    if (!original) throw new Error('Uhamisho haukupatikana.');
+
+    const validItems = (items || []).filter(it => it.quantity > 0);
+    if (!validItems.length) throw new Error('Weka angalau idadi moja ya kuhamisha');
+
+    const keyOf = (locId, name, size) => `${locId}::${(name || '').trim().toLowerCase()}::${(size || '').trim().toLowerCase()}`;
+    const deltas = {};
+    const addDelta = (locId, name, size, amount) => {
+      const k = keyOf(locId, name, size);
+      deltas[k] = (deltas[k] || 0) + amount;
+    };
+
+    // 1) Tengua athari ya zamani
+    (original.items || []).forEach(it => {
+      addDelta(original.fromLocationId, it.name, it.size, +(it.quantity || 0));
+      addDelta(original.toLocationId, it.name, it.size, -(it.quantity || 0));
+    });
+
+    // 2) Weka athari mpya
+    validItems.forEach(it => {
+      addDelta(fromLocationId, it.name, it.size, -(it.quantity || 0));
+      addDelta(toLocationId, it.name, it.size, +(it.quantity || 0));
+    });
+
+    // 3) Hakikisha hakuna stock hasi kabla ya kutekeleza chochote
+    const updates = [];
+    for (const k of Object.keys(deltas)) {
+      if (deltas[k] === 0) continue;
+      const [locId, name, size] = k.split('::');
+      const product = products.find(p => (
+        String(p.locationId) === String(locId) &&
+        p.name.trim().toLowerCase() === name &&
+        (p.size || '').trim().toLowerCase() === size
+      ));
+      if (!product) continue; // bidhaa haipo tena (imefutwa) - ruka
+      const newStock = product.stock + deltas[k];
+      if (newStock < 0) {
+        throw new Error(`Stock haitoshi kwa "${product.name}" kufanya mabadiliko haya (inapatikana: ${product.stock}).`);
+      }
+      updates.push({ product, newStock });
+    }
+
+    for (const { product, newStock } of updates) {
+      await updateProduct(product.id, {
+        name: product.name, size: product.size, brand: product.brand,
+        buy: product.buy, sell: product.sell, cat: product.cat, stock: newStock,
+      });
+    }
+
+    // 4) Sasisha rekodi ya uhamisho yenyewe
+    const { data, error } = await sb.from('transfers').update({
+      from_location_id: fromLocationId,
+      to_location_id: toLocationId,
+      note,
+      items: validItems.map(it => ({ name: it.name, size: it.size, quantity: it.quantity })),
+    }).eq('id', id).select().single();
+    if (error) throw new Error(error.message);
+    if (!data) {
+      throw new Error('Huna ruhusa ya kuhariri uhamisho huu. Owner na Manager tu ndio wanaruhusiwa.');
+    }
+
+    const updatedTransfer = {
+      id: data.id, fromLocationId: data.from_location_id, toLocationId: data.to_location_id,
+      note: data.note || '', items: data.items || [], date: (data.created_at || '').split('T')[0],
+    };
+    setTransfers(prev => prev.map(t => (String(t.id) === String(id) ? updatedTransfer : t)));
+    return updatedTransfer;
+  }, [transfers, products, updateProduct]);
+
   const allTransfersWithLocations = useMemo(() => {
     return transfers.map(t => ({
       ...t,
@@ -931,7 +1053,7 @@ export function DataProvider({ children }) {
     expenses, expensesLoading, allExpensesWithLocations, getExpenses, totalAllExpenses,
     loadExpenses, addExpense, updateExpense, deleteExpense,
     transfers, transfersLoading, allTransfersWithLocations,
-    loadTransfers, executeTransfer,
+    loadTransfers, executeTransfer, updateTransfer, deleteTransfer,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

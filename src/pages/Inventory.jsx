@@ -8,7 +8,7 @@ import { matchesSearch } from '../utils/search.js';
 import ProductFormModal from '../components/ProductFormModal.jsx';
 
 export default function Inventory() {
-  const { isManager } = useAuth();
+  const { isManager, isSalesperson, currentUser } = useAuth();
   const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
@@ -19,14 +19,35 @@ export default function Inventory() {
   const [mode, setMode] = useState('add');
   const [editing, setEditing] = useState(null);
 
-  let list = allProductsWithLocations;
-  if (filter === 'store') list = list.filter(p => p.locationType === 'store');
-  if (filter === 'shop') list = list.filter(p => p.locationType === 'shop');
+  const canManage = isManager();
+  // Salesperson: anaona TU bidhaa za eneo lake (location_id yake), na ni
+  // "view-only" - hawezi kuongeza, kuhariri wala kufuta chochote.
+  const salesView = isSalesperson();
+
+  if (!canManage && !salesView) {
+    return (
+      <div className="access-denied">
+        <div className="icon">🔒</div>
+        <div className="title">Access Denied</div>
+        <div>You don't have permission to view Inventory.</div>
+      </div>
+    );
+  }
+
+  let list = salesView
+    ? allProductsWithLocations.filter(p => String(p.locationId) === String(currentUser?.locationId))
+    : allProductsWithLocations;
+
+  if (canManage) {
+    if (filter === 'store') list = list.filter(p => p.locationType === 'store');
+    if (filter === 'shop') list = list.filter(p => p.locationType === 'shop');
+  }
   if (search.trim()) {
     list = list.filter(p => matchesSearch([p.name, p.size, p.brand, p.cat], search));
   }
 
-  const totalStock = allProductsWithLocations.reduce((sum, p) => sum + p.stock, 0);
+  const baseCount = salesView ? allProductsWithLocations.filter(p => String(p.locationId) === String(currentUser?.locationId)) : allProductsWithLocations;
+  const totalStock = baseCount.reduce((sum, p) => sum + p.stock, 0);
   const totalListStock = list.reduce((sum, p) => sum + p.stock, 0);
 
   const openAdd = () => { setMode('add'); setEditing(null); setModalOpen(true); };
@@ -54,25 +75,17 @@ export default function Inventory() {
     }
   };
 
-  if (!isManager()) {
-    return (
-      <div className="access-denied">
-        <div className="icon">🔒</div>
-        <div className="title">Access Denied</div>
-        <div>Inventory is for Owner/Manager only.</div>
-      </div>
-    );
-  }
-
   return (
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-        <h3 className="section-title">📦 All Inventory ({allProductsWithLocations.length} products, {totalStock} units)</h3>
-        <button className="btn-primary" onClick={openAdd}>+ Add Product</button>
+        <h3 className="section-title">
+          📦 {salesView ? 'My Store Inventory' : 'All Inventory'} ({baseCount.length} products, {totalStock} units)
+        </h3>
+        {canManage && <button className="btn-primary" onClick={openAdd}>+ Add Product</button>}
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
-        {['all', 'store', 'shop'].map(f => (
+        {canManage && ['all', 'store', 'shop'].map(f => (
           <button
             key={f}
             className="btn-ghost small"
@@ -107,12 +120,12 @@ export default function Inventory() {
                 <th style={{ padding: 8 }}>Size</th>
                 <th style={{ padding: 8 }}>Brand</th>
                 <th style={{ padding: 8 }}>Category</th>
-                <th style={{ padding: 8 }}>Location</th>
-                <th style={{ padding: 8 }}>Type</th>
-                {isManager() && <th style={{ padding: 8 }}>Buy Price</th>}
+                {canManage && <th style={{ padding: 8 }}>Location</th>}
+                {canManage && <th style={{ padding: 8 }}>Type</th>}
+                {canManage && <th style={{ padding: 8 }}>Buy Price</th>}
                 <th style={{ padding: 8 }}>Sell Price</th>
                 <th style={{ padding: 8 }}>Stock</th>
-                <th style={{ padding: 8 }}>Action</th>
+                {canManage && <th style={{ padding: 8 }}>Action</th>}
               </tr>
             </thead>
             <tbody>
@@ -124,38 +137,42 @@ export default function Inventory() {
                     <td style={{ padding: 8 }}>{p.size || 'N/A'}</td>
                     <td style={{ padding: 8 }}>{p.brand || 'N/A'}</td>
                     <td style={{ padding: 8 }}><span className="badge">{p.cat || 'N/A'}</span></td>
-                    <td style={{ padding: 8 }}>{p.locationIcon} {p.locationName}</td>
-                    <td style={{ padding: 8 }}>{p.locationLabel}</td>
-                    {isManager() && <td style={{ padding: 8 }}>{fmt(p.buy || 0)}</td>}
+                    {canManage && <td style={{ padding: 8 }}>{p.locationIcon} {p.locationName}</td>}
+                    {canManage && <td style={{ padding: 8 }}>{p.locationLabel}</td>}
+                    {canManage && <td style={{ padding: 8 }}>{fmt(p.buy || 0)}</td>}
                     <td style={{ padding: 8, color: '#e07b2a', fontWeight: 700 }}>{fmt(p.sell || 0)}</td>
                     <td style={{ padding: 8, color: stockColor, fontWeight: 700 }}>{p.stock || 0}</td>
-                    <td style={{ padding: 8 }}>
-                      <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => openEdit(p)}>✏️</button>
-                      <button className="btn-ghost small" style={{ color: '#dc2626', marginLeft: 4 }} onClick={() => handleDelete(p)}>🗑️</button>
-                    </td>
+                    {canManage && (
+                      <td style={{ padding: 8 }}>
+                        <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => openEdit(p)}>✏️</button>
+                        <button className="btn-ghost small" style={{ color: '#dc2626', marginLeft: 4 }} onClick={() => handleDelete(p)}>🗑️</button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid #1a1a2e', background: '#f8fafc' }}>
-                <td colSpan={isManager() ? 8 : 7} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total Stock (shown):</td>
+                <td colSpan={canManage ? 8 : 5} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total Stock (shown):</td>
                 <td style={{ padding: 8, fontWeight: 900, color: '#0d9488' }}>{totalListStock} units</td>
-                <td></td>
+                {canManage && <td></td>}
               </tr>
             </tfoot>
           </table>
         )}
       </div>
 
-      <ProductFormModal
-        open={modalOpen}
-        mode={mode}
-        initial={editing}
-        locationOptions={locations}
-        onClose={() => setModalOpen(false)}
-        onSubmit={handleSubmit}
-      />
+      {canManage && (
+        <ProductFormModal
+          open={modalOpen}
+          mode={mode}
+          initial={editing}
+          locationOptions={locations}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleSubmit}
+        />
+      )}
     </div>
   );
 }
