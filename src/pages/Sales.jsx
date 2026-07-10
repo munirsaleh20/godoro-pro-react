@@ -49,12 +49,12 @@ export default function Sales() {
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         <div>
-          <h3 className="section-title">🛒 {manager ? 'All Sales' : 'My Sales'}</h3>
+          <h3 className="section-title">🛒 {manager ? 'All Sales' : 'My Shop Sales'}</h3>
           <div style={{ fontSize: 13, color: '#64748b' }}>
             {manager ? 'All Locations' : myLocation?.name} · Total: <strong>{fmtS(total)}</strong>
           </div>
         </div>
-        <button className="btn-primary" onClick={() => setAddOpen(true)}>+ New Sale</button>
+        {manager && <button className="btn-primary" onClick={() => setAddOpen(true)}>+ New Sale</button>}
       </div>
 
       <div style={{ overflowX: 'auto' }}>
@@ -114,11 +114,13 @@ export default function Sales() {
         )}
       </div>
 
-      <AddSaleModal
-        open={addOpen}
-        lockedLocationId={manager ? null : myLocationId}
-        onClose={() => setAddOpen(false)}
-      />
+      {manager && (
+        <AddSaleModal
+          open={addOpen}
+          lockedLocationId={null}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
       <EditSaleModal
         open={!!editSale}
         sale={editSale}

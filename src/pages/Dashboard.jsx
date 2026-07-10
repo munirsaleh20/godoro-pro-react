@@ -135,7 +135,7 @@ function SalespersonDashboard({ currentUser, onNavigate }) {
           <div className="stat-icon" style={{ background: 'rgba(224,123,42,0.08)' }}>🛒</div>
           <div className="stat-label">Total Sales (all time)</div>
           <div className="stat-value">{mySales.length}</div>
-          <div className="stat-sub">Click to record a new sale</div>
+          <div className="stat-sub">View your shop's sales</div>
         </div>
       </div>
 
