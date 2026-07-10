@@ -8,7 +8,7 @@ import { matchesSearch } from '../utils/search.js';
 import ProductFormModal from '../components/ProductFormModal.jsx';
 
 export default function Inventory() {
-  const { isOwner, isManager } = useAuth();
+  const { isManager } = useAuth();
   const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
@@ -109,7 +109,7 @@ export default function Inventory() {
                 <th style={{ padding: 8 }}>Category</th>
                 <th style={{ padding: 8 }}>Location</th>
                 <th style={{ padding: 8 }}>Type</th>
-                {isOwner() && <th style={{ padding: 8 }}>Buy Price</th>}
+                {isManager() && <th style={{ padding: 8 }}>Buy Price</th>}
                 <th style={{ padding: 8 }}>Sell Price</th>
                 <th style={{ padding: 8 }}>Stock</th>
                 <th style={{ padding: 8 }}>Action</th>
@@ -126,7 +126,7 @@ export default function Inventory() {
                     <td style={{ padding: 8 }}><span className="badge">{p.cat || 'N/A'}</span></td>
                     <td style={{ padding: 8 }}>{p.locationIcon} {p.locationName}</td>
                     <td style={{ padding: 8 }}>{p.locationLabel}</td>
-                    {isOwner() && <td style={{ padding: 8 }}>{fmt(p.buy || 0)}</td>}
+                    {isManager() && <td style={{ padding: 8 }}>{fmt(p.buy || 0)}</td>}
                     <td style={{ padding: 8, color: '#e07b2a', fontWeight: 700 }}>{fmt(p.sell || 0)}</td>
                     <td style={{ padding: 8, color: stockColor, fontWeight: 700 }}>{p.stock || 0}</td>
                     <td style={{ padding: 8 }}>
@@ -139,7 +139,7 @@ export default function Inventory() {
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid #1a1a2e', background: '#f8fafc' }}>
-                <td colSpan={isOwner() ? 8 : 7} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total Stock (shown):</td>
+                <td colSpan={isManager() ? 8 : 7} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total Stock (shown):</td>
                 <td style={{ padding: 8, fontWeight: 900, color: '#0d9488' }}>{totalListStock} units</td>
                 <td></td>
               </tr>

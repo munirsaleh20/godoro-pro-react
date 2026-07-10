@@ -110,8 +110,8 @@ Deno.serve(async (req) => {
       const { staffId, newPassword } = body;
       if (!staffId || !newPassword) return json({ error: 'Missing staffId or newPassword' }, 400);
       if (newPassword.length < 6) return json({ error: 'Password must be at least 6 characters' }, 400);
-      if (callerStaff.role !== 'owner') {
-        return json({ error: 'Only the Owner can change another staff member\'s password' }, 403);
+      if (!['owner', 'manager'].includes(callerStaff.role)) {
+        return json({ error: 'Only Owner/Manager can change another staff member\'s password' }, 403);
       }
 
       const { data: targetStaff, error: targetErr } = await admin

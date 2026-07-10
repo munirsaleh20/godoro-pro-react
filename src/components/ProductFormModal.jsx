@@ -13,7 +13,7 @@ const emptyForm = () => ({
 
 // mode: 'add' | 'edit'
 export default function ProductFormModal({ open, mode, initial, locationOptions, onClose, onSubmit }) {
-  const { isOwner } = useAuth();
+  const { isManager } = useAuth();
   const { knownBrands } = useData();
   const [form, setForm] = useState(emptyForm());
   const [err, setErr] = useState('');
@@ -121,7 +121,7 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
       </div>
 
       <div className="form-row">
-        {isOwner() && (
+        {isManager() && (
           <div className="form-group">
             <label className="form-label">Buy Price (TZS)</label>
             <input className="form-input" type="number" placeholder="65000"

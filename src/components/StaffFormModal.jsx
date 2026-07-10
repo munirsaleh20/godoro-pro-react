@@ -11,7 +11,7 @@ import { useToast } from '../context/ToastContext.jsx';
 // tunatoa uwezo wa kuweka password MPYA badala yake.
 export default function StaffFormModal({ open, mode, initial, onClose, onSubmit }) {
   const { locations, resetStaffPassword } = useData();
-  const { isOwner, currentUser } = useAuth();
+  const { isManager, currentUser } = useAuth();
   const { showToast } = useToast();
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'salesperson', locationId: '' });
   const [err, setErr] = useState('');
@@ -90,7 +90,7 @@ export default function StaffFormModal({ open, mode, initial, onClose, onSubmit 
     }
   };
 
-  const canChangePassword = mode === 'edit' && initial && isOwner() && initial.id !== currentUser?.id && initial.role !== 'owner';
+  const canChangePassword = mode === 'edit' && initial && isManager() && initial.id !== currentUser?.id && initial.role !== 'owner';
 
   return (
     <Modal open={open} title={mode === 'add' ? '👥 Add Staff' : '✏️ Edit Staff'} onClose={onClose}>

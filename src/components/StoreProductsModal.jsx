@@ -7,7 +7,7 @@ import { fmt } from '../utils/format.js';
 // dirisha jipya tayari kwa kuchapisha - unaweza "Save as PDF" ambayo inafunguka
 // vizuri kwenye Word) na "Export CSV" (inafunguka moja kwa moja kwenye Excel).
 export default function StoreProductsModal({ open, location, products, onClose }) {
-  const { isOwner } = useAuth();
+  const { isManager } = useAuth();
 
   if (!open || !location) return null;
 
@@ -21,7 +21,7 @@ export default function StoreProductsModal({ open, location, products, onClose }
         <td>${escapeHtml(p.size || '-')}</td>
         <td>${escapeHtml(p.brand || '-')}</td>
         <td>${escapeHtml(p.cat || '-')}</td>
-        ${isOwner() ? `<td>${fmt(p.buy || 0)}</td>` : ''}
+        ${isManager() ? `<td>${fmt(p.buy || 0)}</td>` : ''}
         <td>${fmt(p.sell || 0)}</td>
         <td>${p.stock || 0}</td>
       </tr>
@@ -48,14 +48,14 @@ export default function StoreProductsModal({ open, location, products, onClose }
             <thead>
               <tr>
                 <th>Product</th><th>Size</th><th>Brand</th><th>Category</th>
-                ${isOwner() ? '<th>Buy Price</th>' : ''}
+                ${isManager() ? '<th>Buy Price</th>' : ''}
                 <th>Sell Price</th><th>Stock</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
             <tfoot>
               <tr>
-                <td colspan="${isOwner() ? 6 : 5}" style="text-align:right;">Total Stock:</td>
+                <td colspan="${isManager() ? 6 : 5}" style="text-align:right;">Total Stock:</td>
                 <td>${totalStock}</td>
               </tr>
             </tfoot>
@@ -73,12 +73,12 @@ export default function StoreProductsModal({ open, location, products, onClose }
   };
 
   const handleExportCsv = () => {
-    const headers = ['Product', 'Size', 'Brand', 'Category', ...(isOwner() ? ['Buy Price'] : []), 'Sell Price', 'Stock'];
+    const headers = ['Product', 'Size', 'Brand', 'Category', ...(isManager() ? ['Buy Price'] : []), 'Sell Price', 'Stock'];
     const lines = [headers.join(',')];
     list.forEach(p => {
       const row = [
         csvSafe(p.name), csvSafe(p.size || ''), csvSafe(p.brand || ''), csvSafe(p.cat || ''),
-        ...(isOwner() ? [p.buy || 0] : []),
+        ...(isManager() ? [p.buy || 0] : []),
         p.sell || 0, p.stock || 0,
       ];
       lines.push(row.join(','));
@@ -120,7 +120,7 @@ export default function StoreProductsModal({ open, location, products, onClose }
                 <th style={{ padding: 8 }}>Size</th>
                 <th style={{ padding: 8 }}>Brand</th>
                 <th style={{ padding: 8 }}>Category</th>
-                {isOwner() && <th style={{ padding: 8 }}>Buy Price</th>}
+                {isManager() && <th style={{ padding: 8 }}>Buy Price</th>}
                 <th style={{ padding: 8 }}>Sell Price</th>
                 <th style={{ padding: 8 }}>Stock</th>
               </tr>
@@ -134,7 +134,7 @@ export default function StoreProductsModal({ open, location, products, onClose }
                     <td style={{ padding: 8 }}>{p.size || 'N/A'}</td>
                     <td style={{ padding: 8 }}>{p.brand || 'N/A'}</td>
                     <td style={{ padding: 8 }}><span className="badge">{p.cat || 'N/A'}</span></td>
-                    {isOwner() && <td style={{ padding: 8 }}>{fmt(p.buy || 0)}</td>}
+                    {isManager() && <td style={{ padding: 8 }}>{fmt(p.buy || 0)}</td>}
                     <td style={{ padding: 8, color: '#e07b2a', fontWeight: 700 }}>{fmt(p.sell || 0)}</td>
                     <td style={{ padding: 8, color: stockColor, fontWeight: 700 }}>{p.stock || 0}</td>
                   </tr>
