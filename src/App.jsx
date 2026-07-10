@@ -33,12 +33,14 @@ export default function App() {
   const { showToast } = useToast();
   const [page, setPageState] = useState(pageFromHash);
   const [dataLoading, setDataLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Kubadilisha ukurasa daima kunasasisha URL hash pia, ili refresh iweze
   // kubaki hapohapo.
   const setPage = (key) => {
     setPageState(key);
     window.location.hash = key;
+    setSidebarOpen(false);
   };
 
   // Endapo mtumiaji anatumia vitufe vya "back/forward" vya browser.
@@ -105,14 +107,28 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar currentPage={page} onNavigate={setPage} />
+      <Sidebar
+        currentPage={page}
+        onNavigate={setPage}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
       <div className="main-content">
         <div className="topbar">
-          <div>
-            <strong>{currentUser.name}</strong>{' '}
-            <span style={{ fontSize: 12, color: '#64748b' }}>
-              {currentUser.role === 'owner' ? '👑 Owner' : currentUser.role === 'manager' ? '🏢 Manager' : '🛒 Salesperson'}
-            </span>
+          <div className="topbar-left">
+            <button
+              className="hamburger-btn"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Fungua menu"
+            >
+              ☰
+            </button>
+            <div>
+              <strong>{currentUser.name}</strong>{' '}
+              <span style={{ fontSize: 12, color: '#64748b' }}>
+                {currentUser.role === 'owner' ? '👑 Owner' : currentUser.role === 'manager' ? '🏢 Manager' : '🛒 Salesperson'}
+              </span>
+            </div>
           </div>
         </div>
         <div className="page-content">
