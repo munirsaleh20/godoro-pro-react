@@ -5,7 +5,7 @@ import { fmtS, today } from '../utils/format.js';
 
 export default function Reports() {
   const { isOwner } = useAuth();
-  const { sales, expenses, locations } = useData();
+  const { sales, expenses, locations, products } = useData();
 
   const [period, setPeriod] = useState('month'); // today | month | year | all
   const [locationId, setLocationId] = useState('all');
@@ -123,6 +123,17 @@ export default function Reports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSales, filteredExpenses]);
 
+  // Thamani ya mzigo (stock) uliopo SASA - haihusiani na "period" (leo/mwezi/
+  // mwaka) kwa sababu ni "snapshot" ya sasa hivi, lakini inaheshimu filter
+  // ya "location" ili uweze kuona thamani ya duka/store moja pekee ukitaka.
+  const inventoryProducts = useMemo(() => (
+    locationId === 'all' ? products : products.filter(p => String(p.locationId) === String(locationId))
+  ), [products, locationId]);
+  const stockValueAtSellPrice = inventoryProducts.reduce((sum, p) => sum + (p.sell || 0) * (p.stock || 0), 0);
+  const stockValueAtBuyPrice = inventoryProducts.reduce((sum, p) => sum + (p.buy || 0) * (p.stock || 0), 0);
+  const totalStockUnits = inventoryProducts.reduce((sum, p) => sum + (p.stock || 0), 0);
+  const potentialProfit = stockValueAtSellPrice - stockValueAtBuyPrice;
+
   return (
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
@@ -185,6 +196,34 @@ export default function Reports() {
           <div className="stat-label">Net Profit</div>
           <div className="stat-value" style={{ color: profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(profit)}</div>
           <div className="stat-sub">Cash Collected − Cost of Goods − Expenses</div>
+        </div>
+      </div>
+
+      <h3 className="section-title" style={{ margin: '20px 0 12px' }}>
+        📦 Thamani ya Mzigo Uliopo Sasa (Current Stock Value)
+        {locationId !== 'all' && ` — ${locations.find(l => String(l.id) === String(locationId))?.name || ''}`}
+      </h3>
+      <div className="manager-stat-cards">
+        <div className="manager-stat-card">
+          <div className="bg-circle" style={{ background: '#0d9488' }}></div>
+          <div className="stat-icon" style={{ background: 'rgba(13,148,136,0.08)' }}>🏷️</div>
+          <div className="stat-label">Thamani kwa Bei ya Kuuza (Sell Price)</div>
+          <div className="stat-value" style={{ color: '#0d9488' }}>{fmtS(stockValueAtSellPrice)}</div>
+          <div className="stat-sub">Ukiuza mzigo wote uliopo kwa bei ya sasa</div>
+        </div>
+        <div className="manager-stat-card">
+          <div className="bg-circle" style={{ background: '#7c3aed' }}></div>
+          <div className="stat-icon" style={{ background: 'rgba(124,58,237,0.08)' }}>💼</div>
+          <div className="stat-label">Thamani kwa Bei ya Kununua (Buy Price)</div>
+          <div className="stat-value" style={{ color: '#7c3aed' }}>{fmtS(stockValueAtBuyPrice)}</div>
+          <div className="stat-sub">Ulichowekeza kwenye mzigo uliopo ({totalStockUnits} units)</div>
+        </div>
+        <div className="manager-stat-card">
+          <div className="bg-circle" style={{ background: potentialProfit >= 0 ? '#16a34a' : '#dc2626' }}></div>
+          <div className="stat-icon" style={{ background: 'rgba(22,163,74,0.08)' }}>📈</div>
+          <div className="stat-label">Faida Inayotarajiwa (Potential Profit)</div>
+          <div className="stat-value" style={{ color: potentialProfit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(potentialProfit)}</div>
+          <div className="stat-sub">Ukiuza mzigo wote — kabla ya matumizi</div>
         </div>
       </div>
 
