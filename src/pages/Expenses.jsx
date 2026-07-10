@@ -22,7 +22,7 @@ export default function Expenses() {
   if (isManager()) {
     list = allExpensesWithLocations;
   } else if (myShop) {
-    list = getExpenses(myShop.id).map(e => ({ ...e, locationName: myShop.name, locationIcon: myShop.type === 'store' ? '🏪' : '🏬' }));
+    list = allExpensesWithLocations.filter(e => String(e.locationId) === String(myShop.id));
   } else {
     list = [];
   }
@@ -34,7 +34,7 @@ export default function Expenses() {
 
   const handleSubmit = async (payload) => {
     if (mode === 'add') {
-      await addExpense(payload);
+      await addExpense({ ...payload, staffId: currentUser.id });
       showToast('✅ Expense added!');
     } else {
       await updateExpense(editing.id, payload);
@@ -90,6 +90,7 @@ export default function Expenses() {
                 <th style={{ padding: 8 }}>Description</th>
                 <th style={{ padding: 8 }}>Paid To</th>
                 <th style={{ padding: 8 }}>Amount</th>
+                <th style={{ padding: 8 }}>Recorded By</th>
                 {isManager() && <th style={{ padding: 8 }}>Action</th>}
               </tr>
             </thead>
@@ -102,6 +103,7 @@ export default function Expenses() {
                   <td style={{ padding: 8 }}>{e.desc}</td>
                   <td style={{ padding: 8 }}>{e.to || 'N/A'}</td>
                   <td style={{ padding: 8, color: '#dc2626', fontWeight: 700 }}>{fmtS(e.amount)}</td>
+                  <td style={{ padding: 8, fontSize: 12, color: '#64748b' }}>👤 {e.recordedBy || '—'}</td>
                   {isManager() && (
                     <td style={{ padding: 8 }}>
                       <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => openEdit(e)}>✏️</button>
@@ -115,6 +117,7 @@ export default function Expenses() {
               <tr style={{ borderTop: '2px solid #1a1a2e', background: '#f8fafc' }}>
                 <td colSpan={isManager() ? 5 : 4} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total:</td>
                 <td style={{ padding: 8, fontWeight: 900, color: '#dc2626' }}>{fmtS(total)}</td>
+                <td></td>
                 {isManager() && <td></td>}
               </tr>
             </tfoot>

@@ -33,7 +33,7 @@ export default function StaffFormModal({ open, mode, initial, onClose, onSubmit 
     if (mode === 'edit' && initial) {
       setForm({ name: initial.name, email: initial.email, password: '', role: initial.role, locationId: initial.locationId || '' });
     } else {
-      setForm({ name: '', email: '', password: '', role: 'salesperson', locationId: locations.find(l => l.type === 'shop')?.id || '' });
+      setForm({ name: '', email: '', password: '', role: 'salesperson', locationId: '' });
     }
   }, [open, mode, initial, locations]);
 

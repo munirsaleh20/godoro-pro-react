@@ -87,6 +87,7 @@ export default function Debts() {
                 <th style={{ padding: 8 }}>Phone</th>
                 {isManager() && <th style={{ padding: 8 }}>Location</th>}
                 <th style={{ padding: 8 }}>Amount Owed</th>
+                <th style={{ padding: 8 }}>Recorded By</th>
                 <th style={{ padding: 8 }}>Details</th>
                 {isManager() && <th style={{ padding: 8 }}>Action</th>}
               </tr>
@@ -99,6 +100,7 @@ export default function Debts() {
                   <td style={{ padding: 8 }}>{d.phone || 'N/A'}</td>
                   {isManager() && <td style={{ padding: 8 }}>{d.locationIcon} {d.locationName}</td>}
                   <td style={{ padding: 8, color: '#dc2626', fontWeight: 700 }}>{fmtS(d.amount)}</td>
+                  <td style={{ padding: 8, fontSize: 12, color: '#64748b' }}>👤 {d.recordedBy || '—'}</td>
                   <td style={{ padding: 8 }}>
                     <button className="btn-ghost small" style={{ color: '#0d9488' }} onClick={() => setViewingDebt(d)}>👁️ View</button>
                   </td>
@@ -115,6 +117,7 @@ export default function Debts() {
               <tr style={{ borderTop: '2px solid #1a1a2e', background: '#f8fafc' }}>
                 <td colSpan={isManager() ? 5 : 4} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total:</td>
                 <td style={{ padding: 8, fontWeight: 900, color: '#dc2626' }}>{fmtS(total)}</td>
+                <td></td>
                 <td></td>
                 {isManager() && <td></td>}
               </tr>

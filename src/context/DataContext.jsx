@@ -318,11 +318,21 @@ export function DataProvider({ children }) {
   ), [debts]);
 
   const allDebtsWithLocations = useMemo(() => {
+    const nameForStaffId = (id) => {
+      const s = staff.find(x => String(x.id) === String(id));
+      return s ? s.name : 'Unknown';
+    };
     return debts.map(d => {
       const loc = getLocation(d.locationId);
-      return { ...d, locationName: loc ? loc.name : 'Unknown', locationIcon: loc?.type === 'store' ? '🏪' : '🏬' };
+      const relatedSale = d.saleId ? sales.find(s => String(s.id) === String(d.saleId)) : null;
+      return {
+        ...d,
+        locationName: loc ? loc.name : 'Unknown',
+        locationIcon: loc?.type === 'store' ? '🏪' : '🏬',
+        recordedBy: relatedSale ? nameForStaffId(relatedSale.staffId) : '—',
+      };
     });
-  }, [debts, getLocation]);
+  }, [debts, getLocation, sales, staff]);
 
   const totalAllDebts = useMemo(() => debts.reduce((sum, d) => sum + (d.amount || 0), 0), [debts]);
 
@@ -561,6 +571,34 @@ export function DataProvider({ children }) {
   // supabase-js hutupa ujumbe wa jumla tu ("non-2xx status code") wakati
   // Edge Function inarudisha error - hii inasoma ujumbe halisi kutoka
   // kwenye response body (JSON au text) ili tuweze kuuonyesha kwa mtumiaji.
+  // TATIZO LILILOKUWEPO: sb.auth.getSession() inarudisha session iliyopo
+  // KWENYE KUMBUKUMBU (local) bila kuhakiki kama access_token yake bado ni
+  // halali - kwenye simu (mobile), tab ikiwa "background" kwa muda (mfano
+  // umehama app nyingine), utaratibu wa auto-refresh wa Supabase husimama,
+  // na token inaweza kuisha muda (expire) bila kujazwa upya. Ukija kutumia
+  // token hiyo iliyokwisha muda kuita Edge Function, unapata
+  // "Not authenticated" - hata ingawa umeshalogin sawasawa.
+  //
+  // FIX: kabla ya kutuma ombi kwenye Edge Function, tunahakiki muda wa
+  // access_token uliopo; kama umeisha (au unakaribia kuisha), tunalazimisha
+  // refresh kwanza ili tupate token mpya, halali.
+  const getFreshAccessToken = async () => {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('Session expired. Please login again.');
+
+    const expiresAt = session.expires_at; // seconds tangu epoch
+    const nowSec = Math.floor(Date.now() / 1000);
+    const isExpiringSoon = !expiresAt || (expiresAt - nowSec) < 60;
+
+    if (!isExpiringSoon) return session.access_token;
+
+    const { data: refreshed, error: refreshErr } = await sb.auth.refreshSession();
+    if (refreshErr || !refreshed?.session) {
+      throw new Error('Session expired. Please login again.');
+    }
+    return refreshed.session.access_token;
+  };
+
   const extractFnError = async (error, fallback) => {
     console.error('Edge Function raw error object:', error);
     try {
@@ -583,41 +621,30 @@ export function DataProvider({ children }) {
     return error?.message || fallback;
   };
 
-  // MUHIMU: getSession() peke yake wakati mwingine hurudisha access_token
-  // ambao TAYARI umeisha muda (expired) - hasa kama simu/tab ilikaa muda
-  // mrefu "backgrounded" (mfano Android inapofunga app kwenye background,
-  // timer ya auto-refresh ya supabase-js haifanyi kazi). getSession()
-  // haihakikishi token bado ni sahihi kwa Edge Function - ndiyo maana
-  // "create" ilikuwa inafanya kazi (muda mfupi baada ya login) lakini
-  // "delete" ikashindwa na 'Not authenticated' (dakika/saa kadhaa baadaye).
-  // Hii inalazimisha upya (refresh) session endapo token iko karibu
-  // kuisha au tayari imeisha, kabla ya kutuma ombi kwenye Edge Function.
-  const getFreshAccessToken = async () => {
-    const { data: { session }, error } = await sb.auth.getSession();
-    if (error || !session) throw new Error('Session expired. Please login again.');
-
-    const nowSec = Math.floor(Date.now() / 1000);
-    const expiresAt = session.expires_at || 0;
-    const isStale = !expiresAt || (expiresAt - nowSec) < 60; // <60s kubaki, ijilazimishe upya
-
-    if (!isStale) return session.access_token;
-
-    const { data: refreshed, error: refreshErr } = await sb.auth.refreshSession();
-    if (refreshErr || !refreshed?.session) {
-      throw new Error('Session expired. Please login again.');
-    }
-    return refreshed.session.access_token;
-  };
-
   // Inatumia Edge Function 'create-staff' (service role inabaki server-side,
   // si kwenye browser - tofauti na faili la HTML la awali).
   const createStaff = useCallback(async ({ name, email, password, role, locationId }) => {
     const accessToken = await getFreshAccessToken();
-    const { data, error } = await sb.functions.invoke('create-staff', {
+    let { data, error } = await sb.functions.invoke('create-staff', {
       body: { action: 'create', name, email, password, role, locationId },
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (error) throw new Error(await extractFnError(error, 'Failed to create staff'));
+    if (error) {
+      const msg = await extractFnError(error, 'Failed to create staff');
+      if (msg === 'Not authenticated') {
+        // Token ilikuwa bado imeisha muda kwa sababu fulani - jaribu tena
+        // baada ya kulazimisha refresh nyingine.
+        const { data: retried, error: retryErr } = await sb.auth.refreshSession();
+        if (retryErr || !retried?.session) throw new Error('Session expired. Please login again.');
+        ({ data, error } = await sb.functions.invoke('create-staff', {
+          body: { action: 'create', name, email, password, role, locationId },
+          headers: { Authorization: `Bearer ${retried.session.access_token}` },
+        }));
+        if (error) throw new Error(await extractFnError(error, 'Failed to create staff'));
+      } else {
+        throw new Error(msg);
+      }
+    }
     if (data?.error) throw new Error(data.error);
     const s = data.staff;
     const newStaff = {
@@ -641,11 +668,24 @@ export function DataProvider({ children }) {
 
   const deleteStaff = useCallback(async (id) => {
     const accessToken = await getFreshAccessToken();
-    const { data, error } = await sb.functions.invoke('create-staff', {
+    let { data, error } = await sb.functions.invoke('create-staff', {
       body: { action: 'delete', staffId: id },
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (error) throw new Error(await extractFnError(error, 'Failed to delete staff'));
+    if (error) {
+      const msg = await extractFnError(error, 'Failed to delete staff');
+      if (msg === 'Not authenticated') {
+        const { data: retried, error: retryErr } = await sb.auth.refreshSession();
+        if (retryErr || !retried?.session) throw new Error('Session expired. Please login again.');
+        ({ data, error } = await sb.functions.invoke('create-staff', {
+          body: { action: 'delete', staffId: id },
+          headers: { Authorization: `Bearer ${retried.session.access_token}` },
+        }));
+        if (error) throw new Error(await extractFnError(error, 'Failed to delete staff'));
+      } else {
+        throw new Error(msg);
+      }
+    }
     if (data?.error) throw new Error(data.error);
     setStaff(prev => prev.filter(s => String(s.id) !== String(id)));
   }, []);
@@ -656,11 +696,24 @@ export function DataProvider({ children }) {
   // badala ya "View Password".)
   const resetStaffPassword = useCallback(async (staffId, newPassword) => {
     const accessToken = await getFreshAccessToken();
-    const { data, error } = await sb.functions.invoke('create-staff', {
+    let { data, error } = await sb.functions.invoke('create-staff', {
       body: { action: 'reset-password', staffId, newPassword },
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (error) throw new Error(await extractFnError(error, 'Failed to change password'));
+    if (error) {
+      const msg = await extractFnError(error, 'Failed to change password');
+      if (msg === 'Not authenticated') {
+        const { data: retried, error: retryErr } = await sb.auth.refreshSession();
+        if (retryErr || !retried?.session) throw new Error('Session expired. Please login again.');
+        ({ data, error } = await sb.functions.invoke('create-staff', {
+          body: { action: 'reset-password', staffId, newPassword },
+          headers: { Authorization: `Bearer ${retried.session.access_token}` },
+        }));
+        if (error) throw new Error(await extractFnError(error, 'Failed to change password'));
+      } else {
+        throw new Error(msg);
+      }
+    }
     if (data?.error) throw new Error(data.error);
     return true;
   }, []);
@@ -687,6 +740,7 @@ export function DataProvider({ children }) {
       setExpenses((data || []).map(e => ({
         id: e.id,
         locationId: e.location_id,
+        staffId: e.staff_id || null,
         date: e.expense_date,
         cat: e.category,
         desc: e.description || '',
@@ -701,16 +755,16 @@ export function DataProvider({ children }) {
     }
   }, []);
 
-  const addExpense = useCallback(async ({ locationId, date, cat, desc, amount, to }) => {
+  const addExpense = useCallback(async ({ locationId, date, cat, desc, amount, to, staffId }) => {
     const { data, error } = await sb.from('expenses').insert({
       location_id: locationId, expense_date: date, category: cat,
-      description: desc, amount, paid_to: to,
+      description: desc, amount, paid_to: to, staff_id: staffId || null,
     }).select().single();
     if (error) throw new Error(error.message);
     const expense = {
-      id: data.id, locationId: data.location_id, date: data.expense_date,
-      cat: data.category, desc: data.description || '', amount: data.amount || 0,
-      to: data.paid_to || '',
+      id: data.id, locationId: data.location_id, staffId: data.staff_id || null,
+      date: data.expense_date, cat: data.category, desc: data.description || '',
+      amount: data.amount || 0, to: data.paid_to || '',
     };
     setExpenses(prev => addUnique(prev, expense));
     return expense;
@@ -742,9 +796,10 @@ export function DataProvider({ children }) {
         ...e,
         locationName: loc ? loc.name : 'Unknown',
         locationIcon: loc?.type === 'store' ? '🏪' : '🏬',
+        recordedBy: e.staffId ? getStaffName(e.staffId) : '—',
       };
     });
-  }, [expenses, getLocation]);
+  }, [expenses, getLocation, getStaffName]);
 
   const totalAllExpenses = useMemo(() => expenses.reduce((sum, e) => sum + (e.amount || 0), 0), [expenses]);
 

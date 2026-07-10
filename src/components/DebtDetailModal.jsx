@@ -74,7 +74,7 @@ export default function DebtDetailModal({ open, debt, onClose }) {
       </div>
 
       <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
-        📅 Sale date: {debt.date} {debt.phone ? `· 📞 ${debt.phone}` : ''}
+        📅 Sale date: {debt.date} {debt.phone ? `· 📞 ${debt.phone}` : ''} {debt.recordedBy ? `· 👤 Recorded by: ${debt.recordedBy}` : ''}
       </div>
 
       {err && <div className="form-error">{err}</div>}
