@@ -1355,6 +1355,38 @@ export function DataProvider({ children }) {
     return txn;
   }, [findMatchingProduct, updateProduct, addProduct]);
 
+  // Kurekodi MZIGO uliopokelewa kutoka kiwandani KWA MKOPO ambao
+  // UNAPELEKWA MOJA KWA MOJA kwa mteja wa Wholesale (DROPSHIP) - mzigo
+  // HAUPITII duka/store letu lolote, hivyo HAUONGEZI stock kwenye
+  // Inventory yetu popote (location_id = null humu). Deni tunalodaiwa na
+  // kiwanda pekee ndilo linaloongezeka hapa (kwa bei ya ununuzi/buyPrice);
+  // deni la mteja wa jumla anayepokea mzigo huu linarekodiwa KANDO kwa
+  // kutumia addWholesaleGoods (kwa bei ya kuuza/sellPrice), kwenye
+  // handleGoodsSubmit ya ukurasa wa Suppliers.
+  const addSupplierGoodsDropship = useCallback(async ({ supplierId, items, description, date, recordedBy }) => {
+    if (!items || !items.length) throw new Error('Weka angalau bidhaa moja iliyopokelewa');
+    const resolvedItems = items.map(it => ({
+      name: it.name, size: it.size, brand: it.brand || '', cat: it.cat || '',
+      quantity: it.quantity, buyPrice: it.buyPrice,
+    }));
+    const amount = items.reduce((sum, it) => sum + (it.quantity || 0) * (it.buyPrice || 0), 0);
+
+    const { data, error } = await sb.from('supplier_transactions').insert({
+      supplier_id: supplierId, location_id: null, type: 'stock_in',
+      description: description?.trim() || null, items: resolvedItems,
+      amount, date: date || today(), recorded_by: recordedBy || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+
+    const txn = {
+      id: data.id, supplierId: data.supplier_id, locationId: data.location_id, type: data.type,
+      description: data.description || '', items: data.items || null, amount: data.amount || 0,
+      date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+    };
+    setSupplierTransactions(prev => addUnique(prev, txn, false));
+    return txn;
+  }, []);
+
   // Kurekodi MALIPO tuliyorejesha kwa kiwanda (inapunguza deni tunalodaiwa).
   const addSupplierPayment = useCallback(async ({ supplierId, amount, description, date, recordedBy }) => {
     const amt = Number(amount) || 0;
@@ -1469,7 +1501,7 @@ export function DataProvider({ children }) {
     suppliers, suppliersLoading, suppliersWithSummary,
     supplierTransactions, supplierTransactionsLoading, totalSupplierDebt,
     loadSuppliers, addSupplier, updateSupplier, deleteSupplier,
-    loadSupplierTransactions, addSupplierGoods, addSupplierPayment, deleteSupplierTransaction,
+    loadSupplierTransactions, addSupplierGoods, addSupplierGoodsDropship, addSupplierPayment, deleteSupplierTransaction,
     getSupplierTransactions, getSupplierBalance, getSupplier,
   };
 

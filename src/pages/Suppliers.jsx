@@ -14,7 +14,8 @@ export default function Suppliers() {
   const {
     getLocation, suppliersWithSummary, totalSupplierDebt,
     addSupplier, updateSupplier, deleteSupplier,
-    addSupplierGoods, addSupplierPayment, deleteSupplierTransaction, getSupplierTransactions,
+    addSupplierGoods, addSupplierGoodsDropship, addSupplierPayment, deleteSupplierTransaction, getSupplierTransactions,
+    addWholesaleCustomer, addWholesaleGoods, addWholesalePayment,
   } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
@@ -84,7 +85,51 @@ export default function Suppliers() {
     }
   };
 
-  const handleGoodsSubmit = async ({ locationId, items, description, date }) => {
+  const handleGoodsSubmit = async ({ dropship, wholesaleCustomerId, newCustomer, deliveryLocation, locationId, items, advance, description, date }) => {
+    if (dropship) {
+      // 1) Kama ni mteja mpya, mwunde kwanza kwenye Wholesale.
+      let customerId = wholesaleCustomerId;
+      let customerName = '';
+      if (!customerId && newCustomer) {
+        const created = await addWholesaleCustomer({ ...newCustomer, createdBy: currentUser.id });
+        customerId = created.id;
+        customerName = created.name;
+      } else {
+        customerName = newCustomer?.name || '';
+      }
+
+      const deliveryNote = deliveryLocation ? ` · Kupelekwa: ${deliveryLocation}` : '';
+
+      // 2) Deni tunalodaiwa na kiwanda (bei ya ununuzi) - HAIINGII stock ya duka letu.
+      await addSupplierGoodsDropship({
+        supplierId: selected.id,
+        items,
+        description: `${description || 'Dropship kwa mteja wa jumla'}${deliveryNote}`.trim(),
+        date, recordedBy: currentUser.id,
+      });
+
+      // 3) Deni la mteja wa jumla kwetu (bei ya kuuza).
+      const wholesaleItems = items.map(({ name, size, quantity, sellPrice }) => ({ name, size, quantity, unitPrice: sellPrice }));
+      const wholesaleAmount = items.reduce((sum, it) => sum + it.quantity * (it.sellPrice || 0), 0);
+      await addWholesaleGoods({
+        customerId, locationId: null, items: wholesaleItems, amount: wholesaleAmount,
+        description: `Dropship kutoka kiwanda "${selected.name}"${deliveryNote}`.trim(),
+        date, recordedBy: currentUser.id,
+      });
+
+      // 4) Malipo ya awali ya mteja (kama yapo).
+      if (advance > 0) {
+        await addWholesalePayment({
+          customerId, locationId: null, amount: advance,
+          description: 'Malipo ya awali (advance) wakati wa kupokea mzigo wa dropship', date, recordedBy: currentUser.id,
+        });
+      }
+
+      showToast(`✅ Mzigo wa dropship umerekodiwa: deni kwa "${selected.name}" na deni la mteja wa jumla vimeongezwa`);
+      setGoodsModalOpen(false);
+      return;
+    }
+
     await addSupplierGoods({
       supplierId: selected.id, locationId, items, description, date, recordedBy: currentUser.id,
     });

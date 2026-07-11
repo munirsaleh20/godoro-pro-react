@@ -4,17 +4,28 @@ import { useData } from '../context/DataContext.jsx';
 import { PRODUCT_NAMES, PRODUCT_SIZES, PRODUCT_CATEGORIES, OTHER_VALUE } from '../utils/productConstants.js';
 import { fmtS, today } from '../utils/format.js';
 
+const DROPSHIP_VALUE = '__dropship__';
+const NEW_CUSTOMER_VALUE = '__new_customer__';
+
 const emptyRow = () => ({
   nameSel: '', nameOther: '', sizeSel: '', sizeOther: '', brand: '', cat: 'Spring', qty: '', buyPrice: '', sellPrice: '',
 });
 
-// Inarekodi mzigo mpya uliopokelewa kutoka kiwandani KWA MKOPO - unatakiwa
-// kugawiwa (kupelekwa) kwenye duka/store fulani. Kila bidhaa iliyoongezwa
-// hapa itaongeza stock ya duka hilo moja kwa moja - ikiwa bidhaa hiyo
-// (jina+size) tayari ipo, stock yake tu inaongezeka; kama ni mpya kabisa,
-// itaundwa moja kwa moja kwenye Inventory.
+// Inarekodi mzigo mpya uliopokelewa kutoka kiwandani KWA MKOPO. Kuna njia
+// MBILI za kupeleka mzigo huu:
+//   1) Kwenye Duka/Store letu (kama kawaida) - unatakiwa kugawiwa kwenye
+//      duka/store fulani. Kila bidhaa iliyoongezwa hapa itaongeza stock ya
+//      duka hilo moja kwa moja - ikiwa bidhaa hiyo (jina+size) tayari ipo,
+//      stock yake tu inaongezeka; kama ni mpya kabisa, itaundwa moja kwa
+//      moja kwenye Inventory.
+//   2) MOJA KWA MOJA kwa Mteja wa Jumla/Wholesale (Dropship) - mzigo
+//      HAUINGII kwenye duka letu, unaenda moja kwa moja kwa mteja wa
+//      wholesale (duka lake mwenyewe). Hii inaongeza DENI MBILI kwa wakati
+//      mmoja: (a) deni tunalodaiwa na kiwanda (kwa bei ya ununuzi), na
+//      (b) deni la mteja wa jumla kwetu (kwa bei ya kuuza) - linaonekana
+//      moja kwa moja kwenye "sheet" ya Wholesale ya mteja huyo.
 export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }) {
-  const { locations, getProducts, knownBrands } = useData();
+  const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary } = useData();
   const [locationId, setLocationId] = useState('');
   const [items, setItems] = useState([]);
   const [row, setRow] = useState(emptyRow());
@@ -22,6 +33,16 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
   const [date, setDate] = useState(today());
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // -- Sehemu za ziada kwa Dropship (mteja wa jumla) --
+  const [wholesaleCustomerId, setWholesaleCustomerId] = useState('');
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const [newCustomerAddress, setNewCustomerAddress] = useState('');
+  const [deliveryLocation, setDeliveryLocation] = useState('');
+  const [advance, setAdvance] = useState('');
+
+  const isDropship = locationId === DROPSHIP_VALUE;
 
   useEffect(() => {
     if (!open) return;
@@ -31,9 +52,15 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
     setRow(emptyRow());
     setDescription('');
     setDate(today());
+    setWholesaleCustomerId('');
+    setNewCustomerName('');
+    setNewCustomerPhone('');
+    setNewCustomerAddress('');
+    setDeliveryLocation('');
+    setAdvance('');
   }, [open, locations]);
 
-  const destProducts = useMemo(() => (locationId ? getProducts(locationId) : []), [locationId, getProducts]);
+  const destProducts = useMemo(() => (locationId && !isDropship ? getProducts(locationId) : []), [locationId, isDropship, getProducts]);
 
   const resolvedName = row.nameSel === OTHER_VALUE ? row.nameOther.trim() : row.nameSel;
   const resolvedSize = row.sizeSel === OTHER_VALUE ? row.sizeOther.trim() : row.sizeSel;
@@ -73,20 +100,52 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
   const removeItem = (key) => setItems(prev => prev.filter(it => it.key !== key));
 
   const totalAmount = items.reduce((sum, it) => sum + it.quantity * it.buyPrice, 0);
+  const wholesaleTotalAmount = items.reduce((sum, it) => sum + it.quantity * (it.sellPrice || 0), 0);
+  const advanceAmt = Math.min(parseFloat(advance) || 0, wholesaleTotalAmount);
 
   const handleSubmit = async () => {
     setErr('');
     if (!locationId) { setErr('Chagua duka/store litakalopokea mzigo huu'); return; }
     if (!items.length) { setErr('Ongeza angalau bidhaa moja kwenye mzigo'); return; }
 
+    if (isDropship) {
+      if (wholesaleCustomerId === NEW_CUSTOMER_VALUE && !newCustomerName.trim()) {
+        setErr('Andika jina la duka/mteja wa jumla anayepokea mzigo huu');
+        return;
+      }
+      if (!wholesaleCustomerId) {
+        setErr('Chagua mteja wa jumla anayepokea mzigo huu, au ongeza mteja mpya');
+        return;
+      }
+      if (items.some(it => !it.sellPrice)) {
+        setErr('Weka bei ya kuuza (sell) kwa kila bidhaa - hii ndiyo itakayotumika kuhesabu deni la mteja wa jumla');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
-      await onSubmit({
-        locationId,
-        items: items.map(({ key, isNew, ...it }) => it),
-        description: description.trim(),
-        date,
-      });
+      if (isDropship) {
+        await onSubmit({
+          dropship: true,
+          wholesaleCustomerId: wholesaleCustomerId === NEW_CUSTOMER_VALUE ? null : wholesaleCustomerId,
+          newCustomer: wholesaleCustomerId === NEW_CUSTOMER_VALUE
+            ? { name: newCustomerName.trim(), phone: newCustomerPhone.trim(), address: newCustomerAddress.trim() }
+            : null,
+          deliveryLocation: deliveryLocation.trim(),
+          items: items.map(({ key, isNew, ...it }) => it),
+          advance: advanceAmt,
+          description: description.trim(),
+          date,
+        });
+      } else {
+        await onSubmit({
+          locationId,
+          items: items.map(({ key, isNew, ...it }) => it),
+          description: description.trim(),
+          date,
+        });
+      }
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -107,8 +166,52 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
           {locations.map(loc => (
             <option key={loc.id} value={loc.id}>{loc.type === 'store' ? '🏪' : '🏬'} {loc.name}</option>
           ))}
+          <option value={DROPSHIP_VALUE}>🚚 Nyingine — Peleka Moja kwa Moja kwa Mteja wa Jumla</option>
         </select>
       </div>
+
+      {isDropship && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: '#9a3412', marginBottom: 10 }}>
+            🚚 Mzigo huu unatoka kiwandani moja kwa moja kwenda kwa mteja wa jumla (hauingii kwenye stock ya duka letu). Deni litaonekana pande zote mbili: tunalodaiwa na kiwanda, na deni la mteja wa jumla kwetu.
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">🏪 Mteja wa Jumla Anayepokea Mzigo <span className="required">*</span></label>
+            <select className="form-select" value={wholesaleCustomerId} onChange={(e) => setWholesaleCustomerId(e.target.value)}>
+              <option value="">-- Chagua Mteja wa Jumla --</option>
+              {wholesaleCustomersWithSummary.map(c => (
+                <option key={c.id} value={c.id}>{c.name}{c.balance > 0 ? ` (Deni: ${fmtS(c.balance)})` : ''}</option>
+              ))}
+              <option value={NEW_CUSTOMER_VALUE}>+ Mteja Mpya wa Jumla</option>
+            </select>
+          </div>
+
+          {wholesaleCustomerId === NEW_CUSTOMER_VALUE && (
+            <div>
+              <div className="form-group">
+                <label className="form-label">Jina la Duka/Mteja Mpya <span className="required">*</span></label>
+                <input className="form-input" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="mfano: Duka la Juma - Mwanza" />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Simu (hiari)</label>
+                  <input className="form-input" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} placeholder="07XX XXX XXX" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Anwani (hiari)</label>
+                  <input className="form-input" value={newCustomerAddress} onChange={(e) => setNewCustomerAddress(e.target.value)} placeholder="mfano: Mwanza" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">📍 Eneo/Mahali Mzigo Unapelekwa (hiari)</label>
+            <input className="form-input" value={deliveryLocation} onChange={(e) => setDeliveryLocation(e.target.value)} placeholder="mfano: Mwanza Mjini, karibu na stendi" />
+          </div>
+        </div>
+      )}
 
       <div style={{ background: '#1a1a2e', color: '#fff', padding: '10px 14px', borderRadius: '8px 8px 0 0', fontSize: 13, fontWeight: 700, marginTop: 12 }}>
         📋 Ongeza Bidhaa kwenye Mzigo
@@ -149,9 +252,11 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
 
         {resolvedName && (
           <div style={{ fontSize: 12, marginBottom: 10, color: matchingExisting ? '#16a34a' : '#e07b2a' }}>
-            {matchingExisting
-              ? `✅ Tayari ipo kwenye stock (${matchingExisting.stock}) - idadi itaongezwa hapo.`
-              : '🆕 Bidhaa mpya - itaundwa kwenye Inventory ya duka hili.'}
+            {isDropship
+              ? '🚚 Bidhaa hii itaenda moja kwa moja kwa mteja wa jumla - haitaingia kwenye Inventory ya duka letu.'
+              : (matchingExisting
+                ? `✅ Tayari ipo kwenye stock (${matchingExisting.stock}) - idadi itaongezwa hapo.`
+                : '🆕 Bidhaa mpya - itaundwa kwenye Inventory ya duka hili.')}
           </div>
         )}
 
@@ -174,7 +279,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
             <input className="form-input" type="number" min="0" value={row.buyPrice} onChange={(e) => setRow({ ...row, buyPrice: e.target.value })} placeholder="65000" />
           </div>
           <div className="form-group">
-            <label className="form-label">Bei ya Kuuza (Sell) {!matchingExisting && <span className="required">*</span>}</label>
+            <label className="form-label">Bei ya Kuuza (Sell) {(isDropship || !matchingExisting) && <span className="required">*</span>}</label>
             <input className="form-input" type="number" min="0" value={row.sellPrice} onChange={(e) => setRow({ ...row, sellPrice: e.target.value })}
               placeholder={matchingExisting ? `Iliyopo: ${matchingExisting.sell}` : '110000'} />
           </div>
@@ -210,6 +315,31 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
 
           <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginTop: 8, fontSize: 13 }}>
             <strong style={{ color: '#dc2626' }}>💳 Deni jipya kwa "{supplier.name}": {fmtS(totalAmount)}</strong>
+            {isDropship && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #fecaca' }}>
+                <strong style={{ color: '#dc2626' }}>💳 Deni jipya la Mteja wa Jumla: {fmtS(wholesaleTotalAmount)}</strong>
+                {advanceAmt > 0 && (
+                  <>
+                    <div style={{ marginTop: 4, color: '#16a34a' }}>✅ Malipo ya Awali: {fmtS(advanceAmt)}</div>
+                    <div style={{ fontWeight: 800, color: '#dc2626' }}>Deni la Mteja Litakalobaki: {fmtS(Math.max(0, wholesaleTotalAmount - advanceAmt))}</div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isDropship && items.length > 0 && (
+        <div className="form-group" style={{ marginTop: 12 }}>
+          <label className="form-label">💰 Malipo ya Awali ya Mteja (Advance) — hiari</label>
+          <input
+            className="form-input" type="number" min="0" step="any"
+            value={advance} onChange={(e) => setAdvance(e.target.value)}
+            placeholder="mfano: mteja akilipa kiasi fulani sasa hivi"
+          />
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+            Kama mteja wa jumla analipa sehemu ya pesa mara moja anapopokea mzigo huu, weka kiasi hicho hapa.
           </div>
         </div>
       )}
@@ -228,7 +358,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
       <div className="form-actions">
         <button className="btn-ghost" onClick={onClose}>Ghairi</button>
         <button className="btn-primary" onClick={handleSubmit} disabled={saving || !items.length}>
-          {saving ? 'Inahifadhi...' : '📦 Pokea Mzigo Kwa Mkopo →'}
+          {saving ? 'Inahifadhi...' : (isDropship ? '🚚 Peleka Mzigo Moja kwa Moja →' : '📦 Pokea Mzigo Kwa Mkopo →')}
         </button>
       </div>
     </Modal>
