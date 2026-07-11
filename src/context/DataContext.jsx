@@ -1038,7 +1038,6 @@ export function DataProvider({ children }) {
       if (error) throw error;
       setWholesaleCustomers((data || []).map(c => ({
         id: c.id,
-        locationId: c.location_id,
         name: c.name,
         phone: c.phone || '',
         address: c.address || '',
@@ -1054,14 +1053,14 @@ export function DataProvider({ children }) {
     }
   }, []);
 
-  const addWholesaleCustomer = useCallback(async ({ locationId, name, phone, address, notes, createdBy }) => {
+  const addWholesaleCustomer = useCallback(async ({ name, phone, address, notes, createdBy }) => {
     const { data, error } = await sb.from('wholesale_customers').insert({
-      location_id: locationId, name: name.trim(), phone: phone?.trim() || null,
+      name: name.trim(), phone: phone?.trim() || null,
       address: address?.trim() || null, notes: notes?.trim() || null, created_by: createdBy || null,
     }).select().single();
     if (error) throw new Error(error.message);
     const customer = {
-      id: data.id, locationId: data.location_id, name: data.name,
+      id: data.id, name: data.name,
       phone: data.phone || '', address: data.address || '', notes: data.notes || '',
       createdBy: data.created_by, createdAt: data.created_at,
     };
@@ -1212,20 +1211,17 @@ export function DataProvider({ children }) {
   // "sheets" kwenye chini ya Excel workbook.
   const wholesaleCustomersWithSummary = useMemo(() => {
     return wholesaleCustomers.map(c => {
-      const loc = getLocation(c.locationId);
       const txns = wholesaleTransactions.filter(t => String(t.customerId) === String(c.id));
       const balance = txns.reduce((sum, t) => sum + (t.type === 'goods' ? (t.amount || 0) : -(t.amount || 0)), 0);
       const lastTxn = txns.reduce((latest, t) => (!latest || t.date > latest ? t.date : latest), null);
       return {
         ...c,
-        locationName: loc ? loc.name : 'Unknown',
-        locationIcon: loc?.type === 'store' ? '🏪' : '🏬',
         balance,
         transactionCount: txns.length,
         lastActivity: lastTxn,
       };
     });
-  }, [wholesaleCustomers, wholesaleTransactions, getLocation]);
+  }, [wholesaleCustomers, wholesaleTransactions]);
 
   const totalWholesaleDebt = useMemo(() => (
     wholesaleCustomersWithSummary.reduce((sum, c) => sum + Math.max(0, c.balance), 0)

@@ -12,7 +12,7 @@ import WholesalePaymentModal from '../components/WholesalePaymentModal.jsx';
 export default function Wholesale() {
   const { currentUser, isManager } = useAuth();
   const {
-    locations, wholesaleCustomersWithSummary, totalWholesaleDebt,
+    getLocation, wholesaleCustomersWithSummary, totalWholesaleDebt,
     addWholesaleCustomer, updateWholesaleCustomer, deleteWholesaleCustomer,
     addWholesaleGoods, addWholesalePayment, deleteWholesaleTransaction, getWholesaleTransactions,
   } = useData();
@@ -85,14 +85,14 @@ export default function Wholesale() {
     }
   };
 
-  const handleGoodsSubmit = async ({ items, amount, description, date, advance }) => {
+  const handleGoodsSubmit = async ({ locationId, items, amount, description, date, advance }) => {
     await addWholesaleGoods({
-      customerId: selected.id, locationId: selected.locationId, items, amount, description, date, recordedBy: currentUser.id,
+      customerId: selected.id, locationId, items, amount, description, date, recordedBy: currentUser.id,
     });
     let msg = `✅ Mzigo wa ${fmtS(amount)} umerekodiwa kwa "${selected.name}"`;
     if (advance > 0) {
       await addWholesalePayment({
-        customerId: selected.id, locationId: selected.locationId, amount: advance,
+        customerId: selected.id, locationId: null, amount: advance,
         description: 'Malipo ya awali (advance) wakati wa kutoa mzigo', date, recordedBy: currentUser.id,
       });
       msg += ` · Malipo ya awali ${fmtS(advance)} yamerekodiwa`;
@@ -103,7 +103,7 @@ export default function Wholesale() {
 
   const handlePaymentSubmit = async ({ amount, description, date }) => {
     await addWholesalePayment({
-      customerId: selected.id, locationId: selected.locationId, amount, description, date, recordedBy: currentUser.id,
+      customerId: selected.id, locationId: null, amount, description, date, recordedBy: currentUser.id,
     });
     showToast(`✅ Malipo ya ${fmtS(amount)} yamerekodiwa`);
     setPaymentModalOpen(false);
@@ -132,7 +132,7 @@ export default function Wholesale() {
           <div>
             <h3 className="section-title" style={{ marginBottom: 2 }}>📊 {selected.name}</h3>
             <div style={{ fontSize: 12, color: '#64748b' }}>
-              {selected.phone ? `📞 ${selected.phone}` : ''} {selected.address ? `· 📍 ${selected.address}` : ''} · {selected.locationIcon} {selected.locationName}
+              {selected.phone ? `📞 ${selected.phone}` : ''} {selected.address ? `· 📍 ${selected.address}` : ''}
             </div>
           </div>
           {isManager() && (
@@ -189,11 +189,16 @@ export default function Wholesale() {
                 </tr>
               </thead>
               <tbody>
-                {ledger.map(t => (
+                {ledger.map(t => {
+                  const loc = t.locationId ? getLocation(t.locationId) : null;
+                  return (
                   <tr key={t.id}>
                     <td>{t.date}</td>
                     <td>
                       {t.type === 'goods' && t.items ? t.items.map(it => `${it.name} (${it.quantity})`).join(', ') : (t.description || (t.type === 'goods' ? 'Mzigo' : 'Malipo'))}
+                      {t.type === 'goods' && loc && (
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}> · {loc.type === 'store' ? '🏪' : '🏬'} {loc.name}</span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right', color: '#dc2626', fontWeight: t.type === 'goods' ? 700 : 400 }}>
                       {t.type === 'goods' ? fmtS(t.amount) : ''}
@@ -208,7 +213,8 @@ export default function Wholesale() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -218,7 +224,6 @@ export default function Wholesale() {
         <WholesalePaymentModal open={paymentModalOpen} customer={selected} onClose={() => setPaymentModalOpen(false)} onSubmit={handlePaymentSubmit} />
         <WholesaleCustomerModal
           open={customerModalOpen} mode={customerModalMode} initial={editingCustomer}
-          locationOptions={locations}
           onClose={() => setCustomerModalOpen(false)} onSubmit={handleCustomerSubmit}
         />
       </div>
@@ -263,7 +268,6 @@ export default function Wholesale() {
             <div key={c.id} className="wholesale-sheet-card" onClick={() => setSelectedId(c.id)}>
               <div className="wholesale-sheet-tab">📄 {c.name}</div>
               <div className="wholesale-sheet-body">
-                {isManager() && <div className="wholesale-sheet-loc">{c.locationIcon} {c.locationName}</div>}
                 {c.phone && <div className="wholesale-sheet-phone">📞 {c.phone}</div>}
                 <div className="wholesale-sheet-balance" style={{ color: c.balance > 0 ? '#dc2626' : '#16a34a' }}>
                   {c.balance > 0 ? `Deni: ${fmtS(c.balance)}` : '✅ Hakuna Deni'}
@@ -277,7 +281,6 @@ export default function Wholesale() {
 
       <WholesaleCustomerModal
         open={customerModalOpen} mode={customerModalMode} initial={editingCustomer}
-        locationOptions={locations}
         onClose={() => setCustomerModalOpen(false)} onSubmit={handleCustomerSubmit}
       />
     </div>

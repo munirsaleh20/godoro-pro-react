@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
 
-const emptyForm = (locationId = '') => ({ locationId, name: '', phone: '', address: '', notes: '' });
+const emptyForm = () => ({ name: '', phone: '', address: '', notes: '' });
 
 // mode: 'add' | 'edit'
-export default function WholesaleCustomerModal({ open, mode, initial, locationOptions, lockedLocationId, onClose, onSubmit }) {
-  const { isManager } = useAuth();
+// Mteja wa Wholesale HAJAFUNGWA na duka/store maalum - anaweza kuhudumiwa
+// kutoka Store yoyote (hiyo inachaguliwa kila anapopewa mzigo, si hapa).
+export default function WholesaleCustomerModal({ open, mode, initial, onClose, onSubmit }) {
   const [form, setForm] = useState(emptyForm());
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
@@ -16,17 +16,16 @@ export default function WholesaleCustomerModal({ open, mode, initial, locationOp
     setErr('');
     if (mode === 'edit' && initial) {
       setForm({
-        locationId: initial.locationId, name: initial.name || '',
-        phone: initial.phone || '', address: initial.address || '', notes: initial.notes || '',
+        name: initial.name || '', phone: initial.phone || '',
+        address: initial.address || '', notes: initial.notes || '',
       });
     } else {
-      setForm(emptyForm(lockedLocationId || locationOptions?.[0]?.id || ''));
+      setForm(emptyForm());
     }
-  }, [open, mode, initial, locationOptions, lockedLocationId]);
+  }, [open, mode, initial]);
 
   const handleSave = async () => {
     setErr('');
-    if (!form.locationId) { setErr('Chagua duka/store linalohusika'); return; }
     if (!form.name.trim()) { setErr('Weka jina la duka la jumla (mteja)'); return; }
 
     setSaving(true);
@@ -42,21 +41,6 @@ export default function WholesaleCustomerModal({ open, mode, initial, locationOp
   return (
     <Modal open={open} title={mode === 'add' ? '📊 Ongeza Duka la Jumla' : '✏️ Hariri Duka la Jumla'} onClose={onClose}>
       {err && <div className="form-error">{err}</div>}
-
-      {isManager() && !lockedLocationId && (
-        <div className="form-group">
-          <label className="form-label">Linahudumiwa na Duka/Store <span className="required">*</span></label>
-          <select
-            className="form-select" value={form.locationId} disabled={mode === 'edit'}
-            onChange={(e) => setForm({ ...form, locationId: e.target.value })}
-          >
-            <option value="">-- Chagua Duka/Store --</option>
-            {locationOptions.map(loc => (
-              <option key={loc.id} value={loc.id}>{loc.type === 'store' ? '🏪' : '🏬'} {loc.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
 
       <div className="form-group">
         <label className="form-label">Jina la Duka la Jumla (Mteja) <span className="required">*</span></label>
