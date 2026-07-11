@@ -1105,6 +1105,7 @@ export function DataProvider({ children }) {
         date: t.date,
         recordedBy: t.recorded_by,
         createdAt: t.created_at,
+        dropshipGroupId: t.dropship_group_id || null,
       })));
     } catch (err) {
       console.error('loadWholesaleTransactions error:', err);
@@ -1117,11 +1118,12 @@ export function DataProvider({ children }) {
   // Kurekodi MZIGO MPYA uliopewa duka la jumla kwa mkopo (inaongeza deni).
   // Kama "items" (bidhaa+idadi) zimetolewa, stock ya location husika
   // inapunguzwa moja kwa moja - kama vile mauzo ya kawaida.
-  const addWholesaleGoods = useCallback(async ({ customerId, locationId, items, amount, description, date, recordedBy }) => {
+  const addWholesaleGoods = useCallback(async ({ customerId, locationId, items, amount, description, date, recordedBy, dropshipGroupId }) => {
     const { data, error } = await sb.from('wholesale_transactions').insert({
       customer_id: customerId, location_id: locationId, type: 'goods',
       description: description?.trim() || null, items: items && items.length ? items : null,
       amount, date: date || today(), recorded_by: recordedBy || null,
+      dropship_group_id: dropshipGroupId || null,
     }).select().single();
     if (error) throw new Error(error.message);
 
@@ -1141,24 +1143,27 @@ export function DataProvider({ children }) {
       id: data.id, customerId: data.customer_id, locationId: data.location_id, type: data.type,
       description: data.description || '', items: data.items || null, amount: data.amount || 0,
       date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+      dropshipGroupId: data.dropship_group_id || null,
     };
     setWholesaleTransactions(prev => addUnique(prev, txn, false));
     return txn;
   }, [products, updateProduct]);
 
   // Kurekodi MALIPO ya awamu kutoka kwa duka la jumla (inapunguza deni).
-  const addWholesalePayment = useCallback(async ({ customerId, locationId, amount, description, date, recordedBy }) => {
+  const addWholesalePayment = useCallback(async ({ customerId, locationId, amount, description, date, recordedBy, dropshipGroupId }) => {
     const amt = Number(amount) || 0;
     if (amt <= 0) throw new Error('Weka kiasi kikubwa kuliko sifuri');
     const { data, error } = await sb.from('wholesale_transactions').insert({
       customer_id: customerId, location_id: locationId, type: 'payment',
       description: description?.trim() || null, amount: amt, date: date || today(), recorded_by: recordedBy || null,
+      dropship_group_id: dropshipGroupId || null,
     }).select().single();
     if (error) throw new Error(error.message);
     const txn = {
       id: data.id, customerId: data.customer_id, locationId: data.location_id, type: data.type,
       description: data.description || '', items: null, amount: data.amount || 0,
       date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+      dropshipGroupId: data.dropship_group_id || null,
     };
     setWholesaleTransactions(prev => addUnique(prev, txn, false));
     return txn;
@@ -1298,6 +1303,7 @@ export function DataProvider({ children }) {
         id: t.id, supplierId: t.supplier_id, locationId: t.location_id, type: t.type,
         description: t.description || '', items: t.items || null, amount: t.amount || 0,
         date: t.date, recordedBy: t.recorded_by, createdAt: t.created_at,
+        dropshipGroupId: t.dropship_group_id || null,
       })));
     } catch (err) {
       console.error('loadSupplierTransactions error:', err);
@@ -1370,11 +1376,13 @@ export function DataProvider({ children }) {
       quantity: it.quantity, buyPrice: it.buyPrice,
     }));
     const amount = items.reduce((sum, it) => sum + (it.quantity || 0) * (it.buyPrice || 0), 0);
+    const dropshipGroupId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     const { data, error } = await sb.from('supplier_transactions').insert({
       supplier_id: supplierId, location_id: null, type: 'stock_in',
       description: description?.trim() || null, items: resolvedItems,
       amount, date: date || today(), recorded_by: recordedBy || null,
+      dropship_group_id: dropshipGroupId,
     }).select().single();
     if (error) throw new Error(error.message);
 
@@ -1382,6 +1390,7 @@ export function DataProvider({ children }) {
       id: data.id, supplierId: data.supplier_id, locationId: data.location_id, type: data.type,
       description: data.description || '', items: data.items || null, amount: data.amount || 0,
       date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+      dropshipGroupId: data.dropship_group_id || null,
     };
     setSupplierTransactions(prev => addUnique(prev, txn, false));
     return txn;
@@ -1488,13 +1497,25 @@ export function DataProvider({ children }) {
     // App hii mara nyingi hazirudishi kiotomatiki bila uthibitisho wa ziada)
     // - kama umeongeza mzigo kwa makosa, rekebisha stock husika kwa mkono
     // kwenye Inventory baada ya kufuta mstari huu.
+    const txn = supplierTransactions.find(t => String(t.id) === String(id));
+
     const { data: deletedRows, error } = await sb.from('supplier_transactions').delete().eq('id', id).select();
     if (error) throw new Error(error.message);
     if (!deletedRows || deletedRows.length === 0) {
       throw new Error('Huna ruhusa ya kufuta mstari huu. Owner na Manager tu ndio wanaruhusiwa.');
     }
     setSupplierTransactions(prev => prev.filter(t => String(t.id) !== String(id)));
-  }, []);
+
+    // Kama mzigo huu ulikuwa DROPSHIP (una dropship_group_id), deni la
+    // mteja wa jumla lililoambatana nao (goods + malipo ya awali) LAZIMA
+    // lifutwe pia - vinginevyo linabaki milele kwenye "Faida ya Jumla" na
+    // kwenye deni la mteja huyo hata baada ya mzigo wenyewe kufutwa.
+    if (txn?.dropshipGroupId) {
+      const { error: wErr } = await sb.from('wholesale_transactions').delete().eq('dropship_group_id', txn.dropshipGroupId);
+      if (wErr) throw new Error(wErr.message);
+      setWholesaleTransactions(prev => prev.filter(t => t.dropshipGroupId !== txn.dropshipGroupId));
+    }
+  }, [supplierTransactions]);
 
   const getSupplierTransactions = useCallback((supplierId) => (
     supplierTransactions
