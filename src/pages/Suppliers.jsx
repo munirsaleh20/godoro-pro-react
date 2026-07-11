@@ -10,7 +10,7 @@ import SupplierGoodsModal from '../components/SupplierGoodsModal.jsx';
 import SupplierPaymentModal from '../components/SupplierPaymentModal.jsx';
 
 export default function Suppliers() {
-  const { currentUser } = useAuth();
+  const { currentUser, isManager } = useAuth();
   const {
     getLocation, suppliersWithSummary, totalSupplierDebt,
     addSupplier, updateSupplier, deleteSupplier,
@@ -26,6 +26,16 @@ export default function Suppliers() {
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [goodsModalOpen, setGoodsModalOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+
+  if (!isManager()) {
+    return (
+      <div className="access-denied">
+        <div className="icon">🔒</div>
+        <div className="title">Access Denied</div>
+        <div>Suppliers ni kwa ajili ya Owner/Manager pekee.</div>
+      </div>
+    );
+  }
 
   let list = suppliersWithSummary;
   if (search.trim()) {
