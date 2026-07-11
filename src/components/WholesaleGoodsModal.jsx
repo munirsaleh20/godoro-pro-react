@@ -14,6 +14,7 @@ export default function WholesaleGoodsModal({ open, customer, onClose, onSubmit 
   const [prices, setPrices] = useState({}); // productId -> unit price string
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(today());
+  const [advance, setAdvance] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -24,6 +25,7 @@ export default function WholesaleGoodsModal({ open, customer, onClose, onSubmit 
     setPrices({});
     setDescription('');
     setDate(today());
+    setAdvance('');
   }, [open, customer]);
 
   const products = useMemo(() => (customer ? getProducts(customer.locationId) : []), [customer, getProducts]);
@@ -41,6 +43,8 @@ export default function WholesaleGoodsModal({ open, customer, onClose, onSubmit 
     .filter(r => r.qty > 0);
 
   const totalAmount = summaryItems.reduce((sum, r) => sum + r.qty * r.unitPrice, 0);
+  const advanceAmt = Math.min(parseFloat(advance) || 0, totalAmount);
+  const remainingAfterAdvance = Math.max(0, totalAmount - advanceAmt);
 
   const handleSubmit = async () => {
     setErr('');
@@ -55,7 +59,7 @@ export default function WholesaleGoodsModal({ open, customer, onClose, onSubmit 
 
     setSaving(true);
     try {
-      await onSubmit({ items, amount: totalAmount, description: description.trim(), date });
+      await onSubmit({ items, amount: totalAmount, description: description.trim(), date, advance: advanceAmt });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -133,10 +137,28 @@ export default function WholesaleGoodsModal({ open, customer, onClose, onSubmit 
             </div>
           </div>
 
+          <div className="form-group">
+            <label className="form-label">💰 Malipo ya Awali (Advance) — hiari</label>
+            <input
+              className="form-input" type="number" min="0" step="any"
+              value={advance} onChange={(e) => setAdvance(e.target.value)}
+              placeholder="mfano: mteja akilipa kiasi fulani sasa hivi"
+            />
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+              Kama mteja analipa sehemu ya pesa mara moja anapopokea mzigo, weka kiasi hicho hapa - kitarekodiwa moja kwa moja kama malipo, na deni litakalobaki litapungua ipasavyo.
+            </div>
+          </div>
+
           {summaryItems.length > 0 && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginTop: 8, fontSize: 13 }}>
-              <strong style={{ color: '#dc2626' }}>💳 Deni jipya litakaloongezwa: {fmtS(totalAmount)}</strong>
+              <strong style={{ color: '#dc2626' }}>💳 Thamani ya Mzigo: {fmtS(totalAmount)}</strong>
               <div style={{ marginTop: 4, color: '#64748b' }}>{summaryItems.map(r => `${r.name} (${r.qty})`).join(', ')}</div>
+              {advanceAmt > 0 && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #fecaca' }}>
+                  <div style={{ color: '#16a34a' }}>✅ Malipo ya Awali: {fmtS(advanceAmt)}</div>
+                  <div style={{ fontWeight: 800, color: '#dc2626' }}>Deni Litakalobaki: {fmtS(remainingAfterAdvance)}</div>
+                </div>
+              )}
             </div>
           )}
         </div>

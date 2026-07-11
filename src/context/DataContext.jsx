@@ -1165,14 +1165,34 @@ export function DataProvider({ children }) {
     return txn;
   }, []);
 
+  // Kufuta mstari wa ledger. Ikiwa mstari huo ni "goods" (mzigo uliotolewa),
+  // stock ya bidhaa husika INARUDISHWA kiotomatiki (kutengua/reverse) kabla
+  // ya kufuta rekodi - kama alivyofuta mzigo kwa makosa, stock ya duka
+  // inaongezeka tena kama vile hakuna kilichotolewa.
   const deleteWholesaleTransaction = useCallback(async (id) => {
+    const txn = wholesaleTransactions.find(t => String(t.id) === String(id));
+    if (!txn) throw new Error('Mstari haukupatikana.');
+
+    if (txn.type === 'goods' && Array.isArray(txn.items)) {
+      for (const it of txn.items) {
+        if (!it.productId) continue;
+        const product = products.find(p => String(p.id) === String(it.productId));
+        if (!product) continue;
+        await updateProduct(product.id, {
+          name: product.name, size: product.size, brand: product.brand,
+          buy: product.buy, sell: product.sell, cat: product.cat,
+          stock: product.stock + (it.quantity || 0),
+        });
+      }
+    }
+
     const { data: deletedRows, error } = await sb.from('wholesale_transactions').delete().eq('id', id).select();
     if (error) throw new Error(error.message);
     if (!deletedRows || deletedRows.length === 0) {
       throw new Error('Huna ruhusa ya kufuta mstari huu. Owner na Manager tu ndio wanaruhusiwa.');
     }
     setWholesaleTransactions(prev => prev.filter(t => String(t.id) !== String(id)));
-  }, []);
+  }, [wholesaleTransactions, products, updateProduct]);
 
   const getWholesaleTransactions = useCallback((customerId) => (
     wholesaleTransactions

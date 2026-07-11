@@ -85,11 +85,19 @@ export default function Wholesale() {
     }
   };
 
-  const handleGoodsSubmit = async ({ items, amount, description, date }) => {
+  const handleGoodsSubmit = async ({ items, amount, description, date, advance }) => {
     await addWholesaleGoods({
       customerId: selected.id, locationId: selected.locationId, items, amount, description, date, recordedBy: currentUser.id,
     });
-    showToast(`✅ Mzigo wa ${fmtS(amount)} umerekodiwa kwa "${selected.name}"`);
+    let msg = `✅ Mzigo wa ${fmtS(amount)} umerekodiwa kwa "${selected.name}"`;
+    if (advance > 0) {
+      await addWholesalePayment({
+        customerId: selected.id, locationId: selected.locationId, amount: advance,
+        description: 'Malipo ya awali (advance) wakati wa kutoa mzigo', date, recordedBy: currentUser.id,
+      });
+      msg += ` · Malipo ya awali ${fmtS(advance)} yamerekodiwa`;
+    }
+    showToast(msg);
     setGoodsModalOpen(false);
   };
 
