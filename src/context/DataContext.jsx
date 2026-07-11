@@ -36,6 +36,10 @@ export function DataProvider({ children }) {
   const [expensesLoading, setExpensesLoading] = useState(false);
   const [transfers, setTransfers] = useState([]); // { id, fromLocationId, toLocationId, note, items, date }
   const [transfersLoading, setTransfersLoading] = useState(false);
+  const [wholesaleCustomers, setWholesaleCustomers] = useState([]); // { id, locationId, name, phone, address, notes }
+  const [wholesaleCustomersLoading, setWholesaleCustomersLoading] = useState(false);
+  const [wholesaleTransactions, setWholesaleTransactions] = useState([]); // { id, customerId, locationId, type, description, items, amount, date }
+  const [wholesaleTransactionsLoading, setWholesaleTransactionsLoading] = useState(false);
 
   // ---------------- Locations ----------------
   const loadLocations = useCallback(async () => {
@@ -1014,6 +1018,199 @@ export function DataProvider({ children }) {
     }));
   }, [transfers, getLocation]);
 
+  // ---------------- Wholesale (Jumla) ----------------
+  // Tofauti na "Debts" (ambazo zinatokana na mauzo ya mtu mmoja-mmoja),
+  // Wholesale ni maduka yanayochukua mzigo kwa MKOPO mara kwa mara, wanauza
+  // kisha kurejesha pesa kwa AWAMU - wakati mwingine wakiwa bado hawajamaliza
+  // kulipa deni la mzigo uliopita. Kila duka ni "sheet" moja (wholesale
+  // customer); kila mzigo au malipo ni mstari mpya (transaction) kwenye
+  // sheet hiyo. Deni la sasa halihifadhiwi safu tofauti - linahesabiwa moja
+  // kwa moja kutoka kwenye jumla ya miamala (goods - payments), ili lisiwe
+  // "stale" hata baada ya marekebisho/ufutaji wa mstari wowote.
+  const loadWholesaleCustomers = useCallback(async () => {
+    setWholesaleCustomersLoading(true);
+    try {
+      const { data, error } = await sb.from('wholesale_customers').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      setWholesaleCustomers((data || []).map(c => ({
+        id: c.id,
+        locationId: c.location_id,
+        name: c.name,
+        phone: c.phone || '',
+        address: c.address || '',
+        notes: c.notes || '',
+        createdBy: c.created_by,
+        createdAt: c.created_at,
+      })));
+    } catch (err) {
+      console.error('loadWholesaleCustomers error:', err);
+      throw err;
+    } finally {
+      setWholesaleCustomersLoading(false);
+    }
+  }, []);
+
+  const addWholesaleCustomer = useCallback(async ({ locationId, name, phone, address, notes, createdBy }) => {
+    const { data, error } = await sb.from('wholesale_customers').insert({
+      location_id: locationId, name: name.trim(), phone: phone?.trim() || null,
+      address: address?.trim() || null, notes: notes?.trim() || null, created_by: createdBy || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    const customer = {
+      id: data.id, locationId: data.location_id, name: data.name,
+      phone: data.phone || '', address: data.address || '', notes: data.notes || '',
+      createdBy: data.created_by, createdAt: data.created_at,
+    };
+    setWholesaleCustomers(prev => addUnique(prev, customer, false));
+    return customer;
+  }, []);
+
+  const updateWholesaleCustomer = useCallback(async (id, { name, phone, address, notes }) => {
+    const { error } = await sb.from('wholesale_customers').update({
+      name: name.trim(), phone: phone?.trim() || null, address: address?.trim() || null, notes: notes?.trim() || null,
+    }).eq('id', id);
+    if (error) throw new Error(error.message);
+    setWholesaleCustomers(prev => prev.map(c => (String(c.id) === String(id)
+      ? { ...c, name: name.trim(), phone: phone?.trim() || '', address: address?.trim() || '', notes: notes?.trim() || '' } : c)));
+  }, []);
+
+  const deleteWholesaleCustomer = useCallback(async (id) => {
+    // Kufuta duka la jumla kunafuta pia miamala yake yote (ON DELETE CASCADE
+    // kwenye database), hivyo tunasafisha state ya miamala hapa hapa pia.
+    const { data: deletedRows, error } = await sb.from('wholesale_customers').delete().eq('id', id).select();
+    if (error) throw new Error(error.message);
+    if (!deletedRows || deletedRows.length === 0) {
+      throw new Error('Huna ruhusa ya kufuta duka hili la jumla. Owner na Manager tu ndio wanaruhusiwa.');
+    }
+    setWholesaleCustomers(prev => prev.filter(c => String(c.id) !== String(id)));
+    setWholesaleTransactions(prev => prev.filter(t => String(t.customerId) !== String(id)));
+  }, []);
+
+  const loadWholesaleTransactions = useCallback(async () => {
+    setWholesaleTransactionsLoading(true);
+    try {
+      const { data, error } = await sb.from('wholesale_transactions').select('*').order('date', { ascending: true }).order('created_at', { ascending: true });
+      if (error) throw error;
+      setWholesaleTransactions((data || []).map(t => ({
+        id: t.id,
+        customerId: t.customer_id,
+        locationId: t.location_id,
+        type: t.type,
+        description: t.description || '',
+        items: t.items || null,
+        amount: t.amount || 0,
+        date: t.date,
+        recordedBy: t.recorded_by,
+        createdAt: t.created_at,
+      })));
+    } catch (err) {
+      console.error('loadWholesaleTransactions error:', err);
+      throw err;
+    } finally {
+      setWholesaleTransactionsLoading(false);
+    }
+  }, []);
+
+  // Kurekodi MZIGO MPYA uliopewa duka la jumla kwa mkopo (inaongeza deni).
+  // Kama "items" (bidhaa+idadi) zimetolewa, stock ya location husika
+  // inapunguzwa moja kwa moja - kama vile mauzo ya kawaida.
+  const addWholesaleGoods = useCallback(async ({ customerId, locationId, items, amount, description, date, recordedBy }) => {
+    const { data, error } = await sb.from('wholesale_transactions').insert({
+      customer_id: customerId, location_id: locationId, type: 'goods',
+      description: description?.trim() || null, items: items && items.length ? items : null,
+      amount, date: date || today(), recorded_by: recordedBy || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+
+    // Punguza stock kwa kila bidhaa iliyotolewa (kama ipo kwenye stock ya location hii)
+    for (const it of (items || [])) {
+      if (!it.productId) continue;
+      const product = products.find(p => String(p.id) === String(it.productId));
+      if (!product) continue;
+      const newStock = Math.max(0, product.stock - (it.quantity || 0));
+      await updateProduct(product.id, {
+        name: product.name, size: product.size, brand: product.brand,
+        buy: product.buy, sell: product.sell, cat: product.cat, stock: newStock,
+      });
+    }
+
+    const txn = {
+      id: data.id, customerId: data.customer_id, locationId: data.location_id, type: data.type,
+      description: data.description || '', items: data.items || null, amount: data.amount || 0,
+      date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+    };
+    setWholesaleTransactions(prev => addUnique(prev, txn, false));
+    return txn;
+  }, [products, updateProduct]);
+
+  // Kurekodi MALIPO ya awamu kutoka kwa duka la jumla (inapunguza deni).
+  const addWholesalePayment = useCallback(async ({ customerId, locationId, amount, description, date, recordedBy }) => {
+    const amt = Number(amount) || 0;
+    if (amt <= 0) throw new Error('Weka kiasi kikubwa kuliko sifuri');
+    const { data, error } = await sb.from('wholesale_transactions').insert({
+      customer_id: customerId, location_id: locationId, type: 'payment',
+      description: description?.trim() || null, amount: amt, date: date || today(), recorded_by: recordedBy || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    const txn = {
+      id: data.id, customerId: data.customer_id, locationId: data.location_id, type: data.type,
+      description: data.description || '', items: null, amount: data.amount || 0,
+      date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+    };
+    setWholesaleTransactions(prev => addUnique(prev, txn, false));
+    return txn;
+  }, []);
+
+  const deleteWholesaleTransaction = useCallback(async (id) => {
+    const { data: deletedRows, error } = await sb.from('wholesale_transactions').delete().eq('id', id).select();
+    if (error) throw new Error(error.message);
+    if (!deletedRows || deletedRows.length === 0) {
+      throw new Error('Huna ruhusa ya kufuta mstari huu. Owner na Manager tu ndio wanaruhusiwa.');
+    }
+    setWholesaleTransactions(prev => prev.filter(t => String(t.id) !== String(id)));
+  }, []);
+
+  const getWholesaleTransactions = useCallback((customerId) => (
+    wholesaleTransactions
+      .filter(t => String(t.customerId) === String(customerId))
+      .sort((a, b) => (a.date === b.date ? new Date(a.createdAt) - new Date(b.createdAt) : new Date(a.date) - new Date(b.date)))
+  ), [wholesaleTransactions]);
+
+  // Deni la sasa la duka fulani = jumla ya "goods" - jumla ya "payments"
+  const getWholesaleBalance = useCallback((customerId) => (
+    wholesaleTransactions
+      .filter(t => String(t.customerId) === String(customerId))
+      .reduce((sum, t) => sum + (t.type === 'goods' ? (t.amount || 0) : -(t.amount || 0)), 0)
+  ), [wholesaleTransactions]);
+
+  // Sheets zote (maduka ya jumla) zikiwa na taarifa za ziada - deni la sasa,
+  // eneo, na tarehe ya mwisho ya shughuli - kama vile orodha ya majina ya
+  // "sheets" kwenye chini ya Excel workbook.
+  const wholesaleCustomersWithSummary = useMemo(() => {
+    return wholesaleCustomers.map(c => {
+      const loc = getLocation(c.locationId);
+      const txns = wholesaleTransactions.filter(t => String(t.customerId) === String(c.id));
+      const balance = txns.reduce((sum, t) => sum + (t.type === 'goods' ? (t.amount || 0) : -(t.amount || 0)), 0);
+      const lastTxn = txns.reduce((latest, t) => (!latest || t.date > latest ? t.date : latest), null);
+      return {
+        ...c,
+        locationName: loc ? loc.name : 'Unknown',
+        locationIcon: loc?.type === 'store' ? '🏪' : '🏬',
+        balance,
+        transactionCount: txns.length,
+        lastActivity: lastTxn,
+      };
+    });
+  }, [wholesaleCustomers, wholesaleTransactions, getLocation]);
+
+  const totalWholesaleDebt = useMemo(() => (
+    wholesaleCustomersWithSummary.reduce((sum, c) => sum + Math.max(0, c.balance), 0)
+  ), [wholesaleCustomersWithSummary]);
+
+  const getWholesaleCustomer = useCallback((id) => (
+    wholesaleCustomersWithSummary.find(c => String(c.id) === String(id))
+  ), [wholesaleCustomersWithSummary]);
+
   // ---------------- Live Sync (Realtime) ----------------
   // Owner na Manager (na Salesperson) wote hutumia database moja - bila hii,
   // akibadilisha mmoja (mfano Owner akiongeza mauzo), mwingine (Manager)
@@ -1023,6 +1220,7 @@ export function DataProvider({ children }) {
   const loadersRef = useRef({});
   loadersRef.current = {
     loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers,
+    loadWholesaleCustomers, loadWholesaleTransactions,
   };
 
   useEffect(() => {
@@ -1034,6 +1232,8 @@ export function DataProvider({ children }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'debts' }, () => loadersRef.current.loadDebts())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => loadersRef.current.loadExpenses())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transfers' }, () => loadersRef.current.loadTransfers())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wholesale_customers' }, () => loadersRef.current.loadWholesaleCustomers())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wholesale_transactions' }, () => loadersRef.current.loadWholesaleTransactions())
       .subscribe();
 
     return () => { sb.removeChannel(channel); };
@@ -1054,6 +1254,11 @@ export function DataProvider({ children }) {
     loadExpenses, addExpense, updateExpense, deleteExpense,
     transfers, transfersLoading, allTransfersWithLocations,
     loadTransfers, executeTransfer, updateTransfer, deleteTransfer,
+    wholesaleCustomers, wholesaleCustomersLoading, wholesaleCustomersWithSummary,
+    wholesaleTransactions, wholesaleTransactionsLoading, totalWholesaleDebt,
+    loadWholesaleCustomers, addWholesaleCustomer, updateWholesaleCustomer, deleteWholesaleCustomer,
+    loadWholesaleTransactions, addWholesaleGoods, addWholesalePayment, deleteWholesaleTransaction,
+    getWholesaleTransactions, getWholesaleBalance, getWholesaleCustomer,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

@@ -181,3 +181,35 @@ button, input, select { font-family: inherit; }
 .auth-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
 .auth-tab-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; background: #f8fafc; cursor: pointer; font-weight: 600; }
 .auth-tab-btn.active { background: #e07b2a; color: #fff; border-color: #e07b2a; }
+
+/* Wholesale - muonekano wa "Excel workbook": kila mteja ni "sheet" tofauti */
+.wholesale-sheets-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px;
+}
+.wholesale-sheet-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;
+  cursor: pointer; transition: box-shadow 0.2s, transform 0.15s;
+}
+.wholesale-sheet-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.1); transform: translateY(-2px); }
+.wholesale-sheet-tab {
+  background: #16a34a; color: #fff; font-weight: 700; font-size: 13px;
+  padding: 10px 14px; border-bottom: 2px solid #15803d;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wholesale-sheet-body { padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+.wholesale-sheet-loc { font-size: 11px; color: #64748b; }
+.wholesale-sheet-phone { font-size: 12px; color: #64748b; }
+.wholesale-sheet-balance { font-weight: 800; font-size: 15px; margin-top: 4px; }
+.wholesale-sheet-meta { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+
+/* Ledger ya "sheet" moja - muonekano wa spreadsheet halisi: grid ya seli
+   zenye mistari (borders) kila upande, badala ya jedwali "laini" la kawaida. */
+.excel-sheet { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+.excel-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.excel-table th {
+  background: #eef2f7; color: #334155; font-weight: 700; text-align: left;
+  padding: 8px 12px; border: 1px solid #cbd5e1; position: sticky; top: 0;
+}
+.excel-table td { padding: 7px 12px; border: 1px solid #e2e8f0; }
+.excel-table tbody tr:nth-child(even) { background: #f8fafc; }
+.excel-table tbody tr:hover { background: #fffbeb; }
