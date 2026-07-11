@@ -14,10 +14,11 @@ import Expenses from './pages/Expenses.jsx';
 import Transfers from './pages/Transfers.jsx';
 import Reports from './pages/Reports.jsx';
 import Wholesale from './pages/Wholesale.jsx';
+import Suppliers from './pages/Suppliers.jsx';
 
 const VALID_PAGES = [
   'dashboard', 'sales', 'inventory', 'staff', 'debts',
-  'expenses', 'transfers', 'reports', 'stores', 'shops', 'wholesale',
+  'expenses', 'transfers', 'reports', 'stores', 'shops', 'wholesale', 'suppliers',
 ];
 
 // Inasoma ukurasa wa sasa kutoka kwenye URL (#debts, #sales, n.k.) ili
@@ -30,7 +31,7 @@ function pageFromHash() {
 
 export default function App() {
   const { currentUser, authLoading } = useAuth();
-  const { loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions } = useData();
+  const { loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions } = useData();
   const { showToast } = useToast();
   const [page, setPageState] = useState(pageFromHash);
   const [dataLoading, setDataLoading] = useState(false);
@@ -97,12 +98,12 @@ export default function App() {
       // hatuiiti kabisa kwake.
       const isOwnerOrManager = currentUser.role === 'owner' || currentUser.role === 'manager';
       const loaders = [loadLocations(), loadProducts(), loadSales(), loadStaff(), loadDebts(), loadExpenses(), loadTransfers()];
-      if (isOwnerOrManager) loaders.push(loadWholesaleCustomers(), loadWholesaleTransactions());
+      if (isOwnerOrManager) loaders.push(loadWholesaleCustomers(), loadWholesaleTransactions(), loadSuppliers(), loadSupplierTransactions());
       Promise.all(loaders)
         .catch((err) => showToast('Failed to load data: ' + err.message, 'error'))
         .finally(() => setDataLoading(false));
     }
-  }, [currentUser, loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, showToast]);
+  }, [currentUser, loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, showToast]);
 
   if (authLoading) {
     return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
@@ -149,6 +150,7 @@ export default function App() {
               {page === 'staff' && <Staff />}
               {page === 'debts' && <Debts />}
               {page === 'wholesale' && <Wholesale />}
+              {page === 'suppliers' && <Suppliers />}
               {page === 'expenses' && <Expenses />}
               {page === 'transfers' && <Transfers />}
               {page === 'reports' && <Reports />}

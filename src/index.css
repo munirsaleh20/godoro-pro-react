@@ -196,6 +196,7 @@ button, input, select { font-family: inherit; }
   padding: 10px 14px; border-bottom: 2px solid #15803d;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.wholesale-sheet-tab.supplier-tab { background: #2563eb; border-bottom-color: #1d4ed8; }
 .wholesale-sheet-body { padding: 14px; display: flex; flex-direction: column; gap: 6px; }
 .wholesale-sheet-loc { font-size: 11px; color: #64748b; }
 .wholesale-sheet-phone { font-size: 12px; color: #64748b; }

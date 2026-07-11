@@ -1,0 +1,76 @@
+import { useEffect, useState } from 'react';
+import Modal from './Modal.jsx';
+import { fmtS, today } from '../utils/format.js';
+
+// Inarekodi malipo tuliyorejesha kwa kiwanda kwa AWAMU. Hauhitaji kulipa
+// deni lote mara moja - balance mpya inaonekana moja kwa moja kwenye
+// "sheet" ya kiwanda baada ya hapa.
+export default function SupplierPaymentModal({ open, supplier, onClose, onSubmit }) {
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(today());
+  const [description, setDescription] = useState('');
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setErr('');
+    setAmount('');
+    setDate(today());
+    setDescription('');
+  }, [open, supplier]);
+
+  if (!supplier) return null;
+
+  const handleSubmit = async () => {
+    setErr('');
+    const amt = parseFloat(amount) || 0;
+    if (amt <= 0) { setErr('Weka kiasi kikubwa kuliko sifuri'); return; }
+
+    setSaving(true);
+    try {
+      await onSubmit({ amount: amt, date, description: description.trim() });
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} title={`💰 Rekodi Malipo — ${supplier.name}`} onClose={onClose}>
+      {err && <div className="form-error">{err}</div>}
+
+      <div style={{ background: '#f1f5f9', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
+        Deni tunalodaiwa sasa: <strong style={{ color: supplier.balance > 0 ? '#dc2626' : '#16a34a' }}>{fmtS(Math.max(0, supplier.balance))}</strong>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Kiasi Tulicholipa (TZS) <span className="required">*</span></label>
+        <input
+          className="form-input" type="number" min="0" step="any"
+          value={amount} onChange={(e) => setAmount(e.target.value)}
+          placeholder="0"
+        />
+      </div>
+
+      <div className="form-row">
+        <div className="form-group">
+          <label className="form-label">Tarehe</label>
+          <input className="form-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Maelezo (hiari)</label>
+          <input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="mfano: awamu ya kwanza" />
+        </div>
+      </div>
+
+      <div className="form-actions">
+        <button className="btn-ghost" onClick={onClose}>Ghairi</button>
+        <button className="btn-primary" onClick={handleSubmit} disabled={saving}>
+          {saving ? 'Inahifadhi...' : '💾 Rekodi Malipo'}
+        </button>
+      </div>
+    </Modal>
+  );
+}

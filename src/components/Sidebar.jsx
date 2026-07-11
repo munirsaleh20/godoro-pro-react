@@ -8,6 +8,7 @@ export const NAV_ITEMS = [
   { key: 'sales', label: '🛒 Sales', roles: ['owner', 'manager', 'salesperson'] },
   { key: 'debts', label: '💳 Debts', roles: ['owner', 'manager', 'salesperson'] },
   { key: 'wholesale', label: '📊 Wholesale', roles: ['owner', 'manager'] },
+  { key: 'suppliers', label: '🏭 Suppliers', roles: ['owner', 'manager'] },
   { key: 'expenses', label: '💸 Expenses', roles: ['owner', 'manager', 'salesperson'] },
   { key: 'inventory', label: '📦 Inventory', roles: ['owner', 'manager', 'salesperson'] },
   { key: 'transfers', label: '🔄 Transfers', roles: ['owner', 'manager'] },
