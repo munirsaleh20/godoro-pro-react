@@ -1405,6 +1405,83 @@ export function DataProvider({ children }) {
     return txn;
   }, []);
 
+  // Kuhariri MZIGO (stock_in) uliopokelewa - unaotumika baada ya kugundua
+  // kosa (mfano idadi/bei isiyo sahihi) bila kulazimika kufuta na kuanza
+  // upya. Location ya mzigo (duka letu au dropship) HAIBADILIKI wakati wa
+  // kuhariri - inabaki kama ilivyokuwa awali:
+  //   - Kama mzigo ulikuwa kwenye duka letu (locationId ipo): stock ya
+  //     bidhaa za AWALI inarudishwa kwanza (kutolewa), kisha bidhaa MPYA
+  //     (baada ya marekebisho) zinaongezwa tena - sawa na addSupplierGoods.
+  //   - Kama mzigo ulikuwa DROPSHIP (locationId null): hakuna stock
+  //     inayoguswa - tunabadili tu taarifa za items/kiasi moja kwa moja.
+  // KUMBUKA: kama mzigo huu ulikuwa dropship uliohusisha Wholesale (deni la
+  // mteja wa jumla), kuhariri hapa HAKUBADILISHI deni la mteja huyo - nenda
+  // pia kwenye "sheet" ya Wholesale ya mteja huyo kuhariri/kurekebisha kama
+  // inahitajika.
+  const updateSupplierGoods = useCallback(async ({ id, items, description, date }) => {
+    if (!items || !items.length) throw new Error('Weka angalau bidhaa moja kwenye mzigo');
+    const txn = supplierTransactions.find(t => String(t.id) === String(id));
+    if (!txn) throw new Error('Mstari haukupatikana.');
+    if (txn.type !== 'stock_in') throw new Error('Mstari huu si mzigo (stock_in) - hauwezi kuhaririwa hapa.');
+
+    const locationId = txn.locationId; // null kwa dropship, id halisi kwa duka letu
+
+    if (locationId && Array.isArray(txn.items)) {
+      for (const it of txn.items) {
+        if (!it.productId) continue;
+        const product = products.find(p => String(p.id) === String(it.productId));
+        if (!product) continue;
+        await updateProduct(product.id, {
+          name: product.name, size: product.size, brand: product.brand,
+          buy: product.buy, sell: product.sell, cat: product.cat,
+          stock: Math.max(0, product.stock - (it.quantity || 0)),
+        });
+      }
+    }
+
+    let resolvedItems;
+    if (locationId) {
+      resolvedItems = [];
+      for (const it of items) {
+        const existing = findMatchingProduct(locationId, it.name, it.size);
+        if (existing) {
+          await updateProduct(existing.id, {
+            name: existing.name, size: existing.size, brand: it.brand || existing.brand,
+            buy: it.buyPrice || existing.buy, sell: existing.sell, cat: existing.cat,
+            stock: existing.stock + (it.quantity || 0),
+          });
+          resolvedItems.push({ productId: existing.id, name: existing.name, size: existing.size, quantity: it.quantity, buyPrice: it.buyPrice });
+        } else {
+          const created = await addProduct({
+            locationId, name: it.name, size: it.size, brand: it.brand || '',
+            buy: it.buyPrice || 0, sell: it.buyPrice || 0, stock: it.quantity || 0, cat: it.cat || 'Spring',
+          });
+          resolvedItems.push({ productId: created.id, name: created.name, size: created.size, quantity: it.quantity, buyPrice: it.buyPrice });
+        }
+      }
+    } else {
+      resolvedItems = items.map(it => ({
+        name: it.name, size: it.size, brand: it.brand || '', cat: it.cat || '',
+        quantity: it.quantity, buyPrice: it.buyPrice,
+      }));
+    }
+
+    const amount = items.reduce((sum, it) => sum + (it.quantity || 0) * (it.buyPrice || 0), 0);
+
+    const { data, error } = await sb.from('supplier_transactions').update({
+      items: resolvedItems, amount, description: description?.trim() || null, date: date || txn.date,
+    }).eq('id', id).select().single();
+    if (error) throw new Error(error.message);
+
+    const updated = {
+      id: data.id, supplierId: data.supplier_id, locationId: data.location_id, type: data.type,
+      description: data.description || '', items: data.items || null, amount: data.amount || 0,
+      date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+    };
+    setSupplierTransactions(prev => prev.map(t => (String(t.id) === String(id) ? updated : t)));
+    return updated;
+  }, [supplierTransactions, products, updateProduct, findMatchingProduct, addProduct]);
+
   const deleteSupplierTransaction = useCallback(async (id) => {
     // NOTE: kufuta mstari wa "stock_in" HAKURUDISHI stock iliyokwisha
     // ongezwa kiotomatiki (kama vile kufuta sale/transfer nyingine kwenye
@@ -1501,7 +1578,7 @@ export function DataProvider({ children }) {
     suppliers, suppliersLoading, suppliersWithSummary,
     supplierTransactions, supplierTransactionsLoading, totalSupplierDebt,
     loadSuppliers, addSupplier, updateSupplier, deleteSupplier,
-    loadSupplierTransactions, addSupplierGoods, addSupplierGoodsDropship, addSupplierPayment, deleteSupplierTransaction,
+    loadSupplierTransactions, addSupplierGoods, addSupplierGoodsDropship, updateSupplierGoods, addSupplierPayment, deleteSupplierTransaction,
     getSupplierTransactions, getSupplierBalance, getSupplier,
   };
 

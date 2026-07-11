@@ -8,6 +8,7 @@ import { matchesSearch } from '../utils/search.js';
 import SupplierModal from '../components/SupplierModal.jsx';
 import SupplierGoodsModal from '../components/SupplierGoodsModal.jsx';
 import SupplierPaymentModal from '../components/SupplierPaymentModal.jsx';
+import EditSupplierGoodsModal from '../components/EditSupplierGoodsModal.jsx';
 
 export default function Suppliers() {
   const { currentUser, isManager } = useAuth();
@@ -27,6 +28,7 @@ export default function Suppliers() {
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [goodsModalOpen, setGoodsModalOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [editingGoodsTxn, setEditingGoodsTxn] = useState(null);
 
   if (!isManager()) {
     return (
@@ -156,6 +158,11 @@ export default function Suppliers() {
     }
   };
 
+  const handleEditGoodsSaved = () => {
+    showToast('✅ Mzigo umesasishwa');
+    setEditingGoodsTxn(null);
+  };
+
   // ---------------- Muonekano wa "sheet" moja (details za kiwanda husika) ----------------
   if (selected) {
     return (
@@ -241,6 +248,9 @@ export default function Suppliers() {
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtS(t.runningBalance)}</td>
                       <td style={{ textAlign: 'center' }}>
+                        {t.type === 'stock_in' && (
+                          <button className="btn-ghost small" onClick={() => setEditingGoodsTxn(t)}>✏️</button>
+                        )}
                         <button className="btn-ghost small" style={{ color: '#dc2626' }} onClick={() => handleDeleteTxn(t)}>🗑️</button>
                       </td>
                     </tr>
@@ -253,6 +263,10 @@ export default function Suppliers() {
 
         <SupplierGoodsModal open={goodsModalOpen} supplier={selected} onClose={() => setGoodsModalOpen(false)} onSubmit={handleGoodsSubmit} />
         <SupplierPaymentModal open={paymentModalOpen} supplier={selected} onClose={() => setPaymentModalOpen(false)} onSubmit={handlePaymentSubmit} />
+        <EditSupplierGoodsModal
+          open={!!editingGoodsTxn} txn={editingGoodsTxn} supplier={selected} getLocation={getLocation}
+          onClose={() => setEditingGoodsTxn(null)} onSubmit={handleEditGoodsSaved}
+        />
         <SupplierModal
           open={supplierModalOpen} mode={supplierModalMode} initial={editingSupplier}
           onClose={() => setSupplierModalOpen(false)} onSubmit={handleSupplierSubmit}
