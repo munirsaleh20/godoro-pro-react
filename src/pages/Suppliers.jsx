@@ -111,7 +111,11 @@ export default function Suppliers() {
       });
 
       // 3) Deni la mteja wa jumla kwetu (bei ya kuuza).
-      const wholesaleItems = items.map(({ name, size, quantity, sellPrice }) => ({ name, size, quantity, unitPrice: sellPrice }));
+      // buyPrice (bei ya ununuzi kutoka kiwandani) na source='dropship' zinahifadhiwa
+      // hapa ili Reports iweze kuhesabu FAIDA ya dropship (unitPrice - buyPrice) x
+      // quantity moja kwa moja kutoka kwenye mstari huu wa wholesale, bila kuhitaji
+      // kurudi kuunganisha na rekodi ya supplier_transactions kando.
+      const wholesaleItems = items.map(({ name, size, quantity, sellPrice, buyPrice }) => ({ name, size, quantity, unitPrice: sellPrice, buyPrice: buyPrice || 0, source: 'dropship' }));
       const wholesaleAmount = items.reduce((sum, it) => sum + it.quantity * (it.sellPrice || 0), 0);
       await addWholesaleGoods({
         customerId, locationId: null, items: wholesaleItems, amount: wholesaleAmount,

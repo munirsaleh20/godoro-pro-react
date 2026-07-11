@@ -5,7 +5,7 @@ import { fmtS, today } from '../utils/format.js';
 
 export default function Reports() {
   const { isOwner } = useAuth();
-  const { sales, expenses, locations, products } = useData();
+  const { sales, expenses, locations, products, wholesaleTransactions } = useData();
 
   const [period, setPeriod] = useState('month'); // today | month | year | all
   const [locationId, setLocationId] = useState('all');
@@ -71,7 +71,48 @@ export default function Reports() {
     .reduce((sum, s) => sum + Math.max(0, (s.total || 0) - (s.paid || 0)), 0);
 
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const profit = grossProfit - totalExpenses;
+
+  // FAIDA YA WHOLESALE (Jumla): kila mzigo ('goods') uliotolewa kwa mteja wa
+  // jumla una faida = (unitPrice - buyPrice) x quantity kwa kila bidhaa.
+  // Tunatofautisha CHANZO cha faida hiyo:
+  //   - 'store'    = mzigo ulitoka kwenye stock ya duka/store letu
+  //   - 'dropship' = mzigo ulitoka MOJA KWA MOJA kiwandani (Supplier) kwenda
+  //                  kwa mteja wa jumla, bila kupitia stock yetu
+  // Kama mzigo wa zamani haukuwa na buyPrice/source (kabla ya kipengele hiki
+  // kuwekwa), unahesabiwa kama faida ya TZS 0 kwa usalama badala ya kukisia.
+  //
+  // Faida haihesabiwi kwa kiasi kizima cha mzigo (invoiced) - badala yake
+  // inarekebishwa kwa UWIANO WA MALIPO ALIYOKWISHALIPA mteja huyo (lifetime,
+  // goods zote dhidi ya payments zote), sawa na mtindo uleule unaotumika kwa
+  // "Cost of Goods Sold" ya mauzo ya kawaida hapo juu - ili tusihesabu faida
+  // ya pesa ambayo bado haijalipwa.
+  const custLifetimeTotals = {};
+  wholesaleTransactions.forEach(t => {
+    const key = String(t.customerId);
+    custLifetimeTotals[key] = custLifetimeTotals[key] || { goods: 0, paid: 0 };
+    if (t.type === 'goods') custLifetimeTotals[key].goods += t.amount || 0;
+    else if (t.type === 'payment') custLifetimeTotals[key].paid += t.amount || 0;
+  });
+
+  const wholesaleProfit = useMemo(() => {
+    let storeProfit = 0, dropshipProfit = 0;
+    wholesaleTransactions
+      .filter(t => t.type === 'goods' && inPeriod(t.date) && (locationId === 'all' || String(t.locationId) === String(locationId)))
+      .forEach(t => {
+        const tot = custLifetimeTotals[String(t.customerId)] || { goods: 0, paid: 0 };
+        const fraction = tot.goods > 0 ? Math.min(1, tot.paid / tot.goods) : 0;
+        (t.items || []).forEach(it => {
+          const margin = (it.quantity || 0) * ((it.unitPrice || 0) - (it.buyPrice || 0));
+          const adjusted = margin * fraction;
+          if (it.source === 'dropship') dropshipProfit += adjusted;
+          else storeProfit += adjusted;
+        });
+      });
+    return { storeProfit, dropshipProfit, total: storeProfit + dropshipProfit };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wholesaleTransactions, period, locationId]);
+
+  const profit = grossProfit - totalExpenses + wholesaleProfit.total;
 
   // Per-location breakdown (haiheshimu filter ya location - inaonyesha zote kila mara)
   const perLocation = useMemo(() => {
@@ -154,6 +195,25 @@ export default function Reports() {
         </div>
       </div>
 
+      <h3 className="section-title" style={{ margin: '4px 0 12px' }}>🧾 Faida ya Wholesale — {period === 'today' ? 'Leo' : period === 'month' ? 'Mwezi Huu' : period === 'year' ? 'Mwaka Huu' : 'Muda Wote'}</h3>
+      <div className="manager-stat-cards" style={{ marginBottom: 20 }}>
+        <div className="manager-stat-card">
+          <div className="bg-circle" style={{ background: '#0ea5e9' }}></div>
+          <div className="stat-icon" style={{ background: 'rgba(14,165,233,0.08)' }}>🏪</div>
+          <div className="stat-label">Faida ya Wholesale (Store)</div>
+          <div className="stat-value" style={{ color: '#0ea5e9' }}>{fmtS(wholesaleProfit.storeProfit)}</div>
+          <div className="stat-sub">Mizigo iliyotoka kwenye stock yetu</div>
+        </div>
+        <div className="manager-stat-card">
+          <div className="bg-circle" style={{ background: '#9333ea' }}></div>
+          <div className="stat-icon" style={{ background: 'rgba(147,51,234,0.08)' }}>🏭</div>
+          <div className="stat-label">Faida ya Wholesale (Dropship/Supplier)</div>
+          <div className="stat-value" style={{ color: '#9333ea' }}>{fmtS(wholesaleProfit.dropshipProfit)}</div>
+          <div className="stat-sub">Mizigo iliyotoka moja kwa moja kiwandani</div>
+        </div>
+      </div>
+
+      <h3 className="section-title" style={{ margin: '4px 0 12px' }}>📊 Muhtasari wa Jumla (Sales + Wholesale)</h3>
       <div className="manager-stat-cards">
         <div className="manager-stat-card">
           <div className="bg-circle" style={{ background: '#e07b2a' }}></div>
@@ -195,7 +255,7 @@ export default function Reports() {
           <div className="stat-icon" style={{ background: 'rgba(22,163,74,0.08)' }}>💰</div>
           <div className="stat-label">Net Profit</div>
           <div className="stat-value" style={{ color: profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(profit)}</div>
-          <div className="stat-sub">Cash Collected − Cost of Goods − Expenses</div>
+          <div className="stat-sub">Sales Profit + Wholesale Profit (Store+Dropship) − Expenses</div>
         </div>
       </div>
 

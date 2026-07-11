@@ -34,7 +34,7 @@ export default function WholesaleGoodsModal({ open, customer, onClose, onSubmit 
 
   const rows = useMemo(() => (
     allProductsWithLocations.map(p => ({
-      key: p.id, name: p.name, size: p.size, stock: p.stock, defaultPrice: p.sell,
+      key: p.id, name: p.name, size: p.size, stock: p.stock, defaultPrice: p.sell, buy: p.buy || 0,
       locationId: p.locationId, locationName: p.locationName, locationIcon: p.locationIcon,
     }))
   ), [allProductsWithLocations]);
@@ -58,8 +58,13 @@ export default function WholesaleGoodsModal({ open, customer, onClose, onSubmit 
       if (r.qty > r.stock) { setErr(`Stock haitoshi kwa "${r.name}" (iliyopo: ${r.stock})`); return; }
     }
 
+    // buyPrice (bei ya ununuzi ya bidhaa wakati wa kutoa mzigo huu) na
+    // source='store' zinahifadhiwa hapa ili Reports iweze kuhesabu FAIDA
+    // halisi ya wholesale (unitPrice - buyPrice) x quantity, bila kuhitaji
+    // kurudi kuangalia product.buy ya SASA (ambayo inaweza kubadilika baadaye).
     const items = summaryItems.map(r => ({
       productId: r.key, name: r.name, size: r.size, quantity: r.qty, unitPrice: r.unitPrice,
+      buyPrice: r.buy || 0, source: 'store',
     }));
 
     // Mzigo mmoja unaweza kuchanganya bidhaa kutoka maduka tofauti - kwenye
