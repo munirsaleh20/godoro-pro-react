@@ -24,7 +24,7 @@ const emptyRow = () => ({
 //      mmoja: (a) deni tunalodaiwa na kiwanda (kwa bei ya ununuzi), na
 //      (b) deni la mteja wa jumla kwetu (kwa bei ya kuuza) - linaonekana
 //      moja kwa moja kwenye "sheet" ya Wholesale ya mteja huyo.
-export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }) {
+export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, presetCustomerId }) {
   const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary } = useData();
   const [locationId, setLocationId] = useState('');
   const [items, setItems] = useState([]);
@@ -47,18 +47,22 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
   useEffect(() => {
     if (!open) return;
     setErr('');
-    setLocationId(locations[0]?.id || '');
+    // Kama modal hii imefunguliwa kutoka kwenye "sheet" ya mteja wa jumla
+    // fulani (presetCustomerId), tunalazimisha njia ya Dropship moja kwa
+    // moja na kuchagua mteja huyo - mizigo ya wateja wa jumla HAIRUHUSIWI
+    // tena kutoka kwenye stock ya duka letu, lazima itoke kiwandani.
+    setLocationId(presetCustomerId ? DROPSHIP_VALUE : (locations[0]?.id || ''));
     setItems([]);
     setRow(emptyRow());
     setDescription('');
     setDate(today());
-    setWholesaleCustomerId('');
+    setWholesaleCustomerId(presetCustomerId || '');
     setNewCustomerName('');
     setNewCustomerPhone('');
     setNewCustomerAddress('');
     setDeliveryLocation('');
     setAdvance('');
-  }, [open, locations]);
+  }, [open, locations, presetCustomerId]);
 
   const destProducts = useMemo(() => (locationId && !isDropship ? getProducts(locationId) : []), [locationId, isDropship, getProducts]);
 
@@ -171,6 +175,12 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
   return (
     <Modal open={open} title={`📦 Pokea Mzigo Mpya (Mkopo) — ${supplier.name}`} onClose={onClose}>
       {err && <div className="form-error">{err}</div>}
+
+      {presetCustomerId && (
+        <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 12.5, color: '#0369a1' }}>
+          🎯 Unatoa mzigo huu moja kwa moja kwa mteja wa jumla uliyemchagua — hautaingia kwenye stock ya duka lako.
+        </div>
+      )}
 
       <div className="form-group">
         <label className="form-label">🏬 Peleka Mzigo Duka/Store Gani <span className="required">*</span></label>

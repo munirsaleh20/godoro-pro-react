@@ -10,7 +10,6 @@ import SupplierGoodsModal from '../components/SupplierGoodsModal.jsx';
 import SupplierPaymentModal from '../components/SupplierPaymentModal.jsx';
 import EditSupplierGoodsModal from '../components/EditSupplierGoodsModal.jsx';
 import WholesaleCustomerModal from '../components/WholesaleCustomerModal.jsx';
-import WholesaleGoodsModal from '../components/WholesaleGoodsModal.jsx';
 import WholesalePaymentModal from '../components/WholesalePaymentModal.jsx';
 
 // Suppliers sasa ina VICHUPO viwili:
@@ -33,6 +32,12 @@ export default function Suppliers() {
   const confirmAction = useConfirm();
 
   const [tab, setTab] = useState('factories'); // 'factories' | 'wholesale'
+  // Wateja wa jumla HAWAWEZI tena kuchukua mzigo kutoka kwenye stock ya
+  // duka letu - mzigo wao lazima utoke moja kwa moja kiwandani (dropship).
+  // Hii inashikilia customerId aliyechaguliwa wakati wa "Toa Mzigo Kupitia
+  // Kiwanda" kwenye "sheet" ya mteja, ili SupplierGoodsModal imchague
+  // moja kwa moja mara mtumiaji atakapofungua kiwanda husika.
+  const [dropshipTargetCustomerId, setDropshipTargetCustomerId] = useState(null);
 
   // ============== Kichupo 1: Wasambazaji (Factories/Kiwanda) - state ==============
   const [search, setSearch] = useState('');
@@ -50,7 +55,6 @@ export default function Suppliers() {
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [customerModalMode, setCustomerModalMode] = useState('add');
   const [editingCustomer, setEditingCustomer] = useState(null);
-  const [wGoodsModalOpen, setWGoodsModalOpen] = useState(false);
   const [wPaymentModalOpen, setWPaymentModalOpen] = useState(false);
 
   if (!isManager()) {
@@ -143,6 +147,14 @@ export default function Suppliers() {
 
       showToast(`✅ Mzigo wa dropship umerekodiwa: deni kwa "${selected.name}" na deni la mteja wa jumla vimeongezwa`);
       setGoodsModalOpen(false);
+      // Kama tulikuja kutoka kwenye "sheet" ya mteja fulani (dropshipTargetCustomerId),
+      // turudi huko moja kwa moja tuonyeshe deni jipya kwenye ledger yake.
+      if (dropshipTargetCustomerId) {
+        setDropshipTargetCustomerId(null);
+        setSelectedId(null);
+        setTab('wholesale');
+        setWSelectedId(customerId);
+      }
       return;
     }
 
@@ -235,22 +247,6 @@ export default function Suppliers() {
     }
   };
 
-  const handleWGoodsSubmit = async ({ locationId, items, amount, description, date, advance }) => {
-    await addWholesaleGoods({
-      customerId: wSelected.id, locationId, items, amount, description, date, recordedBy: currentUser.id,
-    });
-    let msg = `✅ Mzigo wa ${fmtS(amount)} umerekodiwa kwa "${wSelected.name}"`;
-    if (advance > 0) {
-      await addWholesalePayment({
-        customerId: wSelected.id, locationId: null, amount: advance,
-        description: 'Malipo ya awali (advance) wakati wa kutoa mzigo', date, recordedBy: currentUser.id,
-      });
-      msg += ` · Malipo ya awali ${fmtS(advance)} yamerekodiwa`;
-    }
-    showToast(msg);
-    setWGoodsModalOpen(false);
-  };
-
   const handleWPaymentSubmit = async ({ amount, description, date }) => {
     await addWholesalePayment({
       customerId: wSelected.id, locationId: null, amount, description, date, recordedBy: currentUser.id,
@@ -339,6 +335,11 @@ export default function Suppliers() {
           </div>
         </div>
 
+        {dropshipTargetCustomerId && (
+          <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: 10, marginBottom: 10, fontSize: 12.5, color: '#0369a1' }}>
+            🎯 Bofya "Pokea Mzigo Mpya (Mkopo)" hapa chini — mzigo utapelekwa moja kwa moja kwa mteja wa jumla uliyemchagua, bila kuingia stock ya duka.
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
           <button className="btn-primary" onClick={() => setGoodsModalOpen(true)}>📦 Pokea Mzigo Mpya (Mkopo)</button>
           <button className="btn-ghost" onClick={() => setPaymentModalOpen(true)}>💰 Rekodi Malipo</button>
@@ -395,7 +396,7 @@ export default function Suppliers() {
           )}
         </div>
 
-        <SupplierGoodsModal open={goodsModalOpen} supplier={selected} onClose={() => setGoodsModalOpen(false)} onSubmit={handleGoodsSubmit} />
+        <SupplierGoodsModal open={goodsModalOpen} supplier={selected} onClose={() => setGoodsModalOpen(false)} onSubmit={handleGoodsSubmit} presetCustomerId={dropshipTargetCustomerId} />
         <SupplierPaymentModal open={paymentModalOpen} supplier={selected} onClose={() => setPaymentModalOpen(false)} onSubmit={handlePaymentSubmit} />
         <EditSupplierGoodsModal
           open={!!editingGoodsTxn} txn={editingGoodsTxn} supplier={selected} getLocation={getLocation}
@@ -460,7 +461,12 @@ export default function Suppliers() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-          <button className="btn-primary" onClick={() => setWGoodsModalOpen(true)}>📦 Toa Mzigo Mpya (Mkopo)</button>
+          <button
+            className="btn-primary"
+            onClick={() => { setDropshipTargetCustomerId(wSelected.id); setWSelectedId(null); setTab('factories'); }}
+          >
+            📦 Toa Mzigo Kupitia Kiwanda (Supplier)
+          </button>
           <button className="btn-ghost" onClick={() => setWPaymentModalOpen(true)}>💰 Rekodi Malipo</button>
         </div>
 
@@ -513,7 +519,6 @@ export default function Suppliers() {
           )}
         </div>
 
-        <WholesaleGoodsModal open={wGoodsModalOpen} customer={wSelected} onClose={() => setWGoodsModalOpen(false)} onSubmit={handleWGoodsSubmit} />
         <WholesalePaymentModal open={wPaymentModalOpen} customer={wSelected} onClose={() => setWPaymentModalOpen(false)} onSubmit={handleWPaymentSubmit} />
         <WholesaleCustomerModal
           open={customerModalOpen} mode={customerModalMode} initial={editingCustomer}
@@ -525,9 +530,20 @@ export default function Suppliers() {
 
   // ================= Muonekano: Kichupo 1, Majedwali ya Wasambazaji =================
   if (tab === 'factories') {
+    const targetCustomer = dropshipTargetCustomerId
+      ? wholesaleCustomersWithSummary.find(c => String(c.id) === String(dropshipTargetCustomerId))
+      : null;
     return (
       <div>
         <TabBar />
+        {targetCustomer && (
+          <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: 12, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontSize: 13, color: '#0369a1' }}>
+              🎯 Unatoa mzigo kwa mteja wa jumla <strong>"{targetCustomer.name}"</strong> — chagua kiwanda husika hapa chini kisha bofya "Pokea Mzigo Mpya (Mkopo)".
+            </div>
+            <button className="btn-ghost small" onClick={() => setDropshipTargetCustomerId(null)}>✖ Ghairi</button>
+          </div>
+        )}
         <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <h3 className="section-title">🏭 Wasambazaji ({list.length})</h3>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
