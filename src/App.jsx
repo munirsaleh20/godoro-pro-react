@@ -13,12 +13,11 @@ import Debts from './pages/Debts.jsx';
 import Expenses from './pages/Expenses.jsx';
 import Transfers from './pages/Transfers.jsx';
 import Reports from './pages/Reports.jsx';
-import Wholesale from './pages/Wholesale.jsx';
 import Suppliers from './pages/Suppliers.jsx';
 
 const VALID_PAGES = [
   'dashboard', 'sales', 'inventory', 'staff', 'debts',
-  'expenses', 'transfers', 'reports', 'stores', 'shops', 'wholesale', 'suppliers',
+  'expenses', 'transfers', 'reports', 'stores', 'shops', 'suppliers',
 ];
 
 // Inasoma ukurasa wa sasa kutoka kwenye URL (#debts, #sales, n.k.) ili
@@ -149,7 +148,6 @@ export default function App() {
               {page === 'inventory' && <Inventory />}
               {page === 'staff' && <Staff />}
               {page === 'debts' && <Debts />}
-              {page === 'wholesale' && <Wholesale />}
               {page === 'suppliers' && <Suppliers />}
               {page === 'expenses' && <Expenses />}
               {page === 'transfers' && <Transfers />}
