@@ -103,6 +103,19 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
   const wholesaleTotalAmount = items.reduce((sum, it) => sum + it.quantity * (it.sellPrice || 0), 0);
   const advanceAmt = Math.min(parseFloat(advance) || 0, wholesaleTotalAmount);
 
+  const missingReason = (() => {
+    if (!items.length) return "Bonyeza kwanza \"+ Ongeza kwenye Mzigo\" hapo juu ili kuweka angalau bidhaa moja kabla ya kutuma.";
+    if (isDropship) {
+      if (!wholesaleCustomerId) return 'Chagua mteja wa jumla anayepokea mzigo huu (au "+ Mteja Mpya wa Jumla") kabla ya kutuma.';
+      if (wholesaleCustomerId === NEW_CUSTOMER_VALUE && !newCustomerName.trim()) return 'Andika jina la duka/mteja mpya wa jumla kabla ya kutuma.';
+    }
+    return '';
+  })();
+
+  const canSubmit = items.length > 0 && (!isDropship || (
+    wholesaleCustomerId && (wholesaleCustomerId !== NEW_CUSTOMER_VALUE || newCustomerName.trim())
+  ));
+
   const handleSubmit = async () => {
     setErr('');
     if (!locationId) { setErr('Chagua duka/store litakalopokea mzigo huu'); return; }
@@ -357,10 +370,15 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit }
 
       <div className="form-actions">
         <button className="btn-ghost" onClick={onClose}>Ghairi</button>
-        <button className="btn-primary" onClick={handleSubmit} disabled={saving || !items.length}>
+        <button className="btn-primary" onClick={handleSubmit} disabled={saving || !canSubmit}>
           {saving ? 'Inahifadhi...' : (isDropship ? '🚚 Peleka Mzigo Moja kwa Moja →' : '📦 Pokea Mzigo Kwa Mkopo →')}
         </button>
       </div>
+      {!saving && missingReason && (
+        <div style={{ fontSize: 12, color: '#e07b2a', textAlign: 'right', marginTop: 6 }}>
+          ⚠️ {missingReason}
+        </div>
+      )}
     </Modal>
   );
 }
