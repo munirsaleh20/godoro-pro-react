@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
 
-const emptyForm = () => ({ name: '', phone: '', address: '', notes: '' });
+const emptyForm = () => ({ name: '', phone: '', address: '', notes: '', openingBalance: '' });
 
 // mode: 'add' | 'edit'
 export default function SupplierModal({ open, mode, initial, onClose, onSubmit }) {
@@ -13,7 +13,7 @@ export default function SupplierModal({ open, mode, initial, onClose, onSubmit }
     if (!open) return;
     setErr('');
     if (mode === 'edit' && initial) {
-      setForm({ name: initial.name || '', phone: initial.phone || '', address: initial.address || '', notes: initial.notes || '' });
+      setForm({ name: initial.name || '', phone: initial.phone || '', address: initial.address || '', notes: initial.notes || '', openingBalance: '' });
     } else {
       setForm(emptyForm());
     }
@@ -25,7 +25,10 @@ export default function SupplierModal({ open, mode, initial, onClose, onSubmit }
 
     setSaving(true);
     try {
-      await onSubmit({ ...form, name: form.name.trim(), phone: form.phone.trim(), address: form.address.trim(), notes: form.notes.trim() });
+      await onSubmit({
+        ...form, name: form.name.trim(), phone: form.phone.trim(), address: form.address.trim(), notes: form.notes.trim(),
+        openingBalance: Number(form.openingBalance) || 0,
+      });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -57,6 +60,20 @@ export default function SupplierModal({ open, mode, initial, onClose, onSubmit }
         <label className="form-label">Maelezo (hiari)</label>
         <input className="form-input" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="mfano: mawasiliano ya moja kwa moja na meneja mauzo" />
       </div>
+
+      {mode === 'add' && (
+        <div className="form-group">
+          <label className="form-label">💳 Deni la Awali (kabla ya Godoro Pro) — hiari</label>
+          <input
+            className="form-input" type="number" min="0" value={form.openingBalance}
+            onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
+            placeholder="mfano: 500000 (ikiwa tayari unamdaiwa kiasi fulani)"
+          />
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+            Kama kiwanda hiki tayari kilikuwa kinakudai kiasi fulani kabla ya kuanza kutumia mfumo huu, weka kiasi hicho hapa - kitaongezwa moja kwa moja kama deni la mwanzo.
+          </div>
+        </div>
+      )}
 
       <div className="form-actions">
         <button className="btn-ghost" onClick={onClose}>Ghairi</button>

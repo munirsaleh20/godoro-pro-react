@@ -1149,6 +1149,30 @@ export function DataProvider({ children }) {
     return txn;
   }, [products, updateProduct]);
 
+  // Kurekodi DENI LA AWALI (kabla ya kuanza kutumia Godoro Pro) la mteja
+  // wa jumla fulani - HAUGUSI stock (hakuna bidhaa mahususi), ni deni tu
+  // la jumla lililokuwepo tayari. Inaongezwa kama 'goods' ya kawaida ili
+  // ihesabike sahihi kwenye balance ya mteja (haiathiri "Faida ya Jumla"
+  // kwa sababu haina 'items' zenye unitPrice/buyPrice).
+  const addWholesaleOpeningBalance = useCallback(async ({ customerId, amount, description, date, recordedBy }) => {
+    const amt = Number(amount) || 0;
+    if (amt <= 0) throw new Error('Weka kiasi kikubwa kuliko sifuri');
+    const { data, error } = await sb.from('wholesale_transactions').insert({
+      customer_id: customerId, location_id: null, type: 'goods',
+      description: description?.trim() || 'Deni la Awali (kabla ya Godoro Pro)', items: null,
+      amount: amt, date: date || today(), recorded_by: recordedBy || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    const txn = {
+      id: data.id, customerId: data.customer_id, locationId: data.location_id, type: data.type,
+      description: data.description || '', items: null, amount: data.amount || 0,
+      date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+      dropshipGroupId: data.dropship_group_id || null,
+    };
+    setWholesaleTransactions(prev => addUnique(prev, txn, false));
+    return txn;
+  }, []);
+
   // Kurekodi MALIPO ya awamu kutoka kwa duka la jumla (inapunguza deni).
   const addWholesalePayment = useCallback(async ({ customerId, locationId, amount, description, date, recordedBy, dropshipGroupId }) => {
     const amt = Number(amount) || 0;
@@ -1396,6 +1420,28 @@ export function DataProvider({ children }) {
     return txn;
   }, []);
 
+  // Kurekodi DENI LA AWALI (kabla ya kuanza kutumia Godoro Pro) la kiwanda
+  // fulani - mzigo huu HAUGUSI stock (hakuna bidhaa mahususi zinazojulikana,
+  // ni deni tu la jumla lililokuwepo tayari). Inaongezwa kama 'stock_in'
+  // ya kawaida ili ihesabike sahihi kwenye balance ya kiwanda.
+  const addSupplierOpeningBalance = useCallback(async ({ supplierId, amount, description, date, recordedBy }) => {
+    const amt = Number(amount) || 0;
+    if (amt <= 0) throw new Error('Weka kiasi kikubwa kuliko sifuri');
+    const { data, error } = await sb.from('supplier_transactions').insert({
+      supplier_id: supplierId, location_id: null, type: 'stock_in',
+      description: description?.trim() || 'Deni la Awali (kabla ya Godoro Pro)', items: null,
+      amount: amt, date: date || today(), recorded_by: recordedBy || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    const txn = {
+      id: data.id, supplierId: data.supplier_id, locationId: data.location_id, type: data.type,
+      description: data.description || '', items: null, amount: data.amount || 0,
+      date: data.date, recordedBy: data.recorded_by, createdAt: data.created_at,
+    };
+    setSupplierTransactions(prev => addUnique(prev, txn, false));
+    return txn;
+  }, []);
+
   // Kurekodi MALIPO tuliyorejesha kwa kiwanda (inapunguza deni tunalodaiwa).
   const addSupplierPayment = useCallback(async ({ supplierId, amount, description, date, recordedBy }) => {
     const amt = Number(amount) || 0;
@@ -1594,12 +1640,12 @@ export function DataProvider({ children }) {
     wholesaleCustomers, wholesaleCustomersLoading, wholesaleCustomersWithSummary,
     wholesaleTransactions, wholesaleTransactionsLoading, totalWholesaleDebt,
     loadWholesaleCustomers, addWholesaleCustomer, updateWholesaleCustomer, deleteWholesaleCustomer,
-    loadWholesaleTransactions, addWholesaleGoods, addWholesalePayment, deleteWholesaleTransaction,
+    loadWholesaleTransactions, addWholesaleGoods, addWholesalePayment, addWholesaleOpeningBalance, deleteWholesaleTransaction,
     getWholesaleTransactions, getWholesaleBalance, getWholesaleCustomer,
     suppliers, suppliersLoading, suppliersWithSummary,
     supplierTransactions, supplierTransactionsLoading, totalSupplierDebt,
     loadSuppliers, addSupplier, updateSupplier, deleteSupplier,
-    loadSupplierTransactions, addSupplierGoods, addSupplierGoodsDropship, updateSupplierGoods, addSupplierPayment, deleteSupplierTransaction,
+    loadSupplierTransactions, addSupplierGoods, addSupplierGoodsDropship, updateSupplierGoods, addSupplierPayment, addSupplierOpeningBalance, deleteSupplierTransaction,
     getSupplierTransactions, getSupplierBalance, getSupplier,
   };
 

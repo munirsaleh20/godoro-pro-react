@@ -23,10 +23,10 @@ export default function Suppliers() {
   const {
     getLocation, suppliersWithSummary, totalSupplierDebt,
     addSupplier, updateSupplier, deleteSupplier,
-    addSupplierGoods, addSupplierGoodsDropship, addSupplierPayment, deleteSupplierTransaction, getSupplierTransactions,
+    addSupplierGoods, addSupplierGoodsDropship, addSupplierPayment, addSupplierOpeningBalance, deleteSupplierTransaction, getSupplierTransactions,
     wholesaleCustomersWithSummary, totalWholesaleDebt, wholesaleTransactions,
     addWholesaleCustomer, updateWholesaleCustomer, deleteWholesaleCustomer,
-    addWholesaleGoods, addWholesalePayment, deleteWholesaleTransaction, getWholesaleTransactions,
+    addWholesaleGoods, addWholesalePayment, addWholesaleOpeningBalance, deleteWholesaleTransaction, getWholesaleTransactions,
   } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
@@ -110,6 +110,12 @@ export default function Suppliers() {
   const handleSupplierSubmit = async (payload) => {
     if (supplierModalMode === 'add') {
       const created = await addSupplier({ ...payload, createdBy: currentUser.id });
+      if (payload.openingBalance > 0) {
+        await addSupplierOpeningBalance({
+          supplierId: created.id, amount: payload.openingBalance,
+          description: 'Deni la Awali (kabla ya Godoro Pro)', recordedBy: currentUser.id,
+        });
+      }
       showToast(`✅ Kiwanda "${created.name}" limeongezwa!`);
       setSelectedId(created.id);
     } else {
@@ -246,6 +252,12 @@ export default function Suppliers() {
   const handleCustomerSubmit = async (payload) => {
     if (customerModalMode === 'add') {
       const created = await addWholesaleCustomer({ ...payload, createdBy: currentUser.id });
+      if (payload.openingBalance > 0) {
+        await addWholesaleOpeningBalance({
+          customerId: created.id, amount: payload.openingBalance,
+          description: 'Deni la Awali (kabla ya Godoro Pro)', recordedBy: currentUser.id,
+        });
+      }
       showToast(`✅ Duka "${created.name}" limeongezwa!`);
       setWSelectedId(created.id);
     } else {
@@ -288,28 +300,57 @@ export default function Suppliers() {
 
   // ================= Sehemu ya juu: Vichupo (Tabs) =================
   const TabBar = () => (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 18, borderBottom: '2px solid #e2e8f0', paddingBottom: 0 }}>
-      <button
-        onClick={() => setTab('factories')}
-        style={{
-          padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14,
-          color: tab === 'factories' ? '#e07b2a' : '#64748b',
-          borderBottom: tab === 'factories' ? '3px solid #e07b2a' : '3px solid transparent', marginBottom: -2,
-        }}
-      >
-        🏭 Wasambazaji ({suppliersWithSummary.length})
-      </button>
-      <button
-        onClick={() => setTab('wholesale')}
-        style={{
-          padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14,
-          color: tab === 'wholesale' ? '#e07b2a' : '#64748b',
-          borderBottom: tab === 'wholesale' ? '3px solid #e07b2a' : '3px solid transparent', marginBottom: -2,
-        }}
-      >
-        📊 Wateja wa Jumla ({wholesaleCustomersWithSummary.length})
-      </button>
-    </div>
+    <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18, borderBottom: '2px solid #e2e8f0', paddingBottom: 0 }}>
+        <button
+          onClick={() => setTab('factories')}
+          style={{
+            padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14,
+            color: tab === 'factories' ? '#e07b2a' : '#64748b',
+            borderBottom: tab === 'factories' ? '3px solid #e07b2a' : '3px solid transparent', marginBottom: -2,
+          }}
+        >
+          🏭 Wasambazaji ({suppliersWithSummary.length})
+        </button>
+        <button
+          onClick={() => setTab('wholesale')}
+          style={{
+            padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14,
+            color: tab === 'wholesale' ? '#e07b2a' : '#64748b',
+            borderBottom: tab === 'wholesale' ? '3px solid #e07b2a' : '3px solid transparent', marginBottom: -2,
+          }}
+        >
+          📊 Wateja wa Jumla ({wholesaleCustomersWithSummary.length})
+        </button>
+      </div>
+
+      {/* Muhtasari wa DENI - unaonekana kwenye vichupo VYOTE viwili, kila
+          wakati, ili kuonyesha pande zote mbili za deni kwa pamoja:
+          (1) deni TUNALOLIDAIWA na wasambazaji (kiwanda kinatudai sisi)
+          (2) deni TUNALODAI wateja wa jumla (sisi tunawadai wao) */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{
+          flex: '1 1 220px', display: 'flex', alignItems: 'center', gap: 10,
+          background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px',
+        }}>
+          <span style={{ fontSize: 20 }}>🏭</span>
+          <div>
+            <div style={{ fontSize: 11, color: '#7f1d1d', fontWeight: 600 }}>Kiwanda Kinatudai (Tunadaiwa)</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#dc2626' }}>{fmtS(totalSupplierDebt)}</div>
+          </div>
+        </div>
+        <div style={{
+          flex: '1 1 220px', display: 'flex', alignItems: 'center', gap: 10,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px',
+        }}>
+          <span style={{ fontSize: 20 }}>📊</span>
+          <div>
+            <div style={{ fontSize: 11, color: '#1e3a8a', fontWeight: 600 }}>Wateja wa Jumla Wanadaiwa (Tunawadai)</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#2563eb' }}>{fmtS(totalWholesaleDebt)}</div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 
   // ================= Muonekano: Kichupo 1, "sheet" ya kiwanda moja =================
