@@ -66,6 +66,20 @@ export default function WholesaleCustomerModal({ open, mode, initial, onClose, o
         <input className="form-input" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="mfano: analipa kila mwisho wa mwezi" />
       </div>
 
+      {mode === 'edit' && (
+        <div className="form-group">
+          <label className="form-label">💳 Ongeza Deni la Awali (kabla ya Godoro Pro) — hiari</label>
+          <input
+            className="form-input" type="number" min="0" value={form.openingBalance}
+            onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
+            placeholder="mfano: 300000"
+          />
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+            Kama mteja huyu ana deni la nyuma ambalo halijawahi kuwekwa kwenye mfumo, weka kiasi hapa - kitaongezwa kama mstari MPYA kwenye ledger yake (haitabadilisha/kufuta chochote kilichopo).
+          </div>
+        </div>
+      )}
+
       {mode === 'add' && (
         <div className="form-group">
           <label className="form-label">💳 Deni la Awali (kabla ya Godoro Pro) — hiari</label>

@@ -108,19 +108,22 @@ export default function Suppliers() {
   const openEditSupplier = (s) => { setSupplierModalMode('edit'); setEditingSupplier(s); setSupplierModalOpen(true); };
 
   const handleSupplierSubmit = async (payload) => {
+    let targetSupplierId;
     if (supplierModalMode === 'add') {
       const created = await addSupplier({ ...payload, createdBy: currentUser.id });
-      if (payload.openingBalance > 0) {
-        await addSupplierOpeningBalance({
-          supplierId: created.id, amount: payload.openingBalance,
-          description: 'Deni la Awali (kabla ya Godoro Pro)', recordedBy: currentUser.id,
-        });
-      }
+      targetSupplierId = created.id;
       showToast(`✅ Kiwanda "${created.name}" limeongezwa!`);
       setSelectedId(created.id);
     } else {
       await updateSupplier(editingSupplier.id, payload);
+      targetSupplierId = editingSupplier.id;
       showToast('✅ Taarifa za kiwanda zimesasishwa!');
+    }
+    if (payload.openingBalance > 0) {
+      await addSupplierOpeningBalance({
+        supplierId: targetSupplierId, amount: payload.openingBalance,
+        description: 'Deni la Awali (kabla ya Godoro Pro)', recordedBy: currentUser.id,
+      });
     }
     setSupplierModalOpen(false);
   };
@@ -250,19 +253,22 @@ export default function Suppliers() {
   const openEditCustomer = (c) => { setCustomerModalMode('edit'); setEditingCustomer(c); setCustomerModalOpen(true); };
 
   const handleCustomerSubmit = async (payload) => {
+    let targetCustomerId;
     if (customerModalMode === 'add') {
       const created = await addWholesaleCustomer({ ...payload, createdBy: currentUser.id });
-      if (payload.openingBalance > 0) {
-        await addWholesaleOpeningBalance({
-          customerId: created.id, amount: payload.openingBalance,
-          description: 'Deni la Awali (kabla ya Godoro Pro)', recordedBy: currentUser.id,
-        });
-      }
+      targetCustomerId = created.id;
       showToast(`✅ Duka "${created.name}" limeongezwa!`);
       setWSelectedId(created.id);
     } else {
       await updateWholesaleCustomer(editingCustomer.id, payload);
+      targetCustomerId = editingCustomer.id;
       showToast('✅ Taarifa za duka zimesasishwa!');
+    }
+    if (payload.openingBalance > 0) {
+      await addWholesaleOpeningBalance({
+        customerId: targetCustomerId, amount: payload.openingBalance,
+        description: 'Deni la Awali (kabla ya Godoro Pro)', recordedBy: currentUser.id,
+      });
     }
     setCustomerModalOpen(false);
   };
