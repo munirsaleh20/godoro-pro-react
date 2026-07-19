@@ -123,6 +123,78 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  const updateProduct = useCallback(async (id, { name, size, brand, buy, sell, stock, cat }) => {
+    const { error } = await sb.from('products').update({
+      name, size, brand, buy_price: buy, sell_price: sell, stock, category: cat,
+    }).eq('id', id);
+    if (error) throw new Error(error.message);
+    setProducts(prev => prev.map(p => (String(p.id) === String(id)
+      ? { ...p, name, size, brand, buy, sell, stock, cat } : p)));
+  }, []);
+
+  const deleteProduct = useCallback(async (id) => {
+    const { error } = await sb.from('products').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+    setProducts(prev => prev.filter(p => String(p.id) !== String(id)));
+  }, []);
+
+  const getProducts = useCallback((locationId) => (
+    products.filter(p => String(p.locationId) === String(locationId))
+  ), [products]);
+
+  // Bidhaa zote zikiwa na taarifa za location (jina, aina, icon) - kama
+  // getAllProductsWithLocations() kwenye HTML ya awali.
+  const allProductsWithLocations = useMemo(() => {
+    return products.map(p => {
+      const loc = getLocation(p.locationId);
+      return {
+        ...p,
+        locationName: loc ? loc.name : 'Unknown',
+        locationType: loc ? loc.type : 'unknown',
+        locationIcon: loc?.type === 'store' ? '🏪' : '🏬',
+        locationLabel: loc?.type === 'store' ? 'Store' : 'Shop',
+      };
+    });
+  }, [products, getLocation]);
+
+  const knownBrands = useMemo(() => (
+    Array.from(new Set(products.map(p => (p.brand || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+  ), [products]);
+
+  // Inatafuta bidhaa kwenye stock ya location fulani inayolingana na jina+size.
+  // Normalisation hii inaondoa nafasi (space), mistari (-), na dot ili
+  // "Vita Raha", "Vita  Raha", na "vitaraha" zote zilingane bidhaa moja -
+  // muhimu kwa wauzaji wasio wazoefu wanaoandika jina kwa mkono (chaguo "Other").
+  const norm = (s) => (s || '').toString().toLowerCase().replace(/[\s\-_.]+/g, '');
+
+  const findMatchingProduct = useCallback((locationId, name, size) => {
+    const list = getProducts(locationId);
+    const nName = norm(name);
+    const nSize = norm(size);
+    if (!nName) return null;
+
+    // 1) Jina na size zinalingana kikamilifu (baada ya normalisation)
+    let found = list.find(p => norm(p.name) === nName && (!nSize || !p.size || norm(p.size) === nSize));
+    if (found) return found;
+
+    // 2) Jina pekee linalingana kikamilifu
+    found = list.find(p => norm(p.name) === nName);
+    if (found) return found;
+
+    // 3) Jina linakaribiana (mfano typo ndogo au sehemu ya jina) + size sahihi
+    found = list.find(p => {
+      const pn = norm(p.name);
+      return pn && (pn.includes(nName) || nName.includes(pn)) && (!nSize || !p.size || norm(p.size) === nSize);
+    });
+    if (found) return found;
+
+    // 4) Jina linakaribiana tu, bila kujali size
+    return list.find(p => {
+      const pn = norm(p.name);
+      return pn && (pn.includes(nName) || nName.includes(pn));
+    }) || null;
+  }, [getProducts]);
+
   // Inatumika na addProduct/bulkAddProducts kutafuta kama bidhaa HIYO HIYO
   // (jina + size + brand, baada ya normalisation) tayari ipo KATIKA LOCATION
   // HIYO HIYO - tofauti na findMatchingProduct (ambayo inaruhusu "karibiana"
@@ -256,78 +328,6 @@ export function DataProvider({ children }) {
     });
     return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [inventoryLogs]);
-
-  const updateProduct = useCallback(async (id, { name, size, brand, buy, sell, stock, cat }) => {
-    const { error } = await sb.from('products').update({
-      name, size, brand, buy_price: buy, sell_price: sell, stock, category: cat,
-    }).eq('id', id);
-    if (error) throw new Error(error.message);
-    setProducts(prev => prev.map(p => (String(p.id) === String(id)
-      ? { ...p, name, size, brand, buy, sell, stock, cat } : p)));
-  }, []);
-
-  const deleteProduct = useCallback(async (id) => {
-    const { error } = await sb.from('products').delete().eq('id', id);
-    if (error) throw new Error(error.message);
-    setProducts(prev => prev.filter(p => String(p.id) !== String(id)));
-  }, []);
-
-  const getProducts = useCallback((locationId) => (
-    products.filter(p => String(p.locationId) === String(locationId))
-  ), [products]);
-
-  // Bidhaa zote zikiwa na taarifa za location (jina, aina, icon) - kama
-  // getAllProductsWithLocations() kwenye HTML ya awali.
-  const allProductsWithLocations = useMemo(() => {
-    return products.map(p => {
-      const loc = getLocation(p.locationId);
-      return {
-        ...p,
-        locationName: loc ? loc.name : 'Unknown',
-        locationType: loc ? loc.type : 'unknown',
-        locationIcon: loc?.type === 'store' ? '🏪' : '🏬',
-        locationLabel: loc?.type === 'store' ? 'Store' : 'Shop',
-      };
-    });
-  }, [products, getLocation]);
-
-  const knownBrands = useMemo(() => (
-    Array.from(new Set(products.map(p => (p.brand || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
-  ), [products]);
-
-  // Inatafuta bidhaa kwenye stock ya location fulani inayolingana na jina+size.
-  // Normalisation hii inaondoa nafasi (space), mistari (-), na dot ili
-  // "Vita Raha", "Vita  Raha", na "vitaraha" zote zilingane bidhaa moja -
-  // muhimu kwa wauzaji wasio wazoefu wanaoandika jina kwa mkono (chaguo "Other").
-  const norm = (s) => (s || '').toString().toLowerCase().replace(/[\s\-_.]+/g, '');
-
-  const findMatchingProduct = useCallback((locationId, name, size) => {
-    const list = getProducts(locationId);
-    const nName = norm(name);
-    const nSize = norm(size);
-    if (!nName) return null;
-
-    // 1) Jina na size zinalingana kikamilifu (baada ya normalisation)
-    let found = list.find(p => norm(p.name) === nName && (!nSize || !p.size || norm(p.size) === nSize));
-    if (found) return found;
-
-    // 2) Jina pekee linalingana kikamilifu
-    found = list.find(p => norm(p.name) === nName);
-    if (found) return found;
-
-    // 3) Jina linakaribiana (mfano typo ndogo au sehemu ya jina) + size sahihi
-    found = list.find(p => {
-      const pn = norm(p.name);
-      return pn && (pn.includes(nName) || nName.includes(pn)) && (!nSize || !p.size || norm(p.size) === nSize);
-    });
-    if (found) return found;
-
-    // 4) Jina linakaribiana tu, bila kujali size
-    return list.find(p => {
-      const pn = norm(p.name);
-      return pn && (pn.includes(nName) || nName.includes(pn));
-    }) || null;
-  }, [getProducts]);
 
   // ---------------- Debts ----------------
   // NOTE: Kwenye HTML ya awali, jedwali la 'debts' lilikuwa linasomwa tu
