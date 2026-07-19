@@ -10,7 +10,7 @@ import BulkAddProductsModal from '../components/BulkAddProductsModal.jsx';
 
 export default function Inventory() {
   const { isManager, isSalesperson, currentUser } = useAuth();
-  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkAddProducts, dailyInventorySummary, inventoryLogs } = useData();
+  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, bulkAddProducts, dailyInventorySummary, inventoryLogs } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
@@ -22,6 +22,8 @@ export default function Inventory() {
   const [expandedDate, setExpandedDate] = useState(null);
   const [mode, setMode] = useState('add');
   const [editing, setEditing] = useState(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
 
   const canManage = isManager();
   // Salesperson: anaona TU bidhaa za eneo lake (location_id yake), na ni
@@ -89,6 +91,43 @@ export default function Inventory() {
     }
   };
 
+  // KIPENGELE: "Bulk Delete" - chagua bidhaa nyingi (checkbox) na uzifute
+  // zote kwa wakati mmoja, badala ya kubofya futa moja moja.
+  const toggleSelectMode = () => {
+    setSelectMode(v => !v);
+    setSelectedIds(new Set());
+  };
+  const toggleSelectOne = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(String(id))) next.delete(String(id)); else next.add(String(id));
+      return next;
+    });
+  };
+  const allVisibleSelected = list.length > 0 && list.every(p => selectedIds.has(String(p.id)));
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => {
+      if (allVisibleSelected) return new Set();
+      const next = new Set(prev);
+      list.forEach(p => next.add(String(p.id)));
+      return next;
+    });
+  };
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const ok = await confirmAction(`Delete ${ids.length} selected product${ids.length > 1 ? 's' : ''}?\n\nThis cannot be undone.`);
+    if (!ok) return;
+    try {
+      await bulkDeleteProducts(ids);
+      showToast(`🗑️ ${ids.length} product${ids.length > 1 ? 's' : ''} deleted`);
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    } catch (err) {
+      showToast('Failed to delete: ' + err.message, 'error');
+    }
+  };
+
   return (
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
@@ -96,12 +135,29 @@ export default function Inventory() {
           📦 {salesView ? 'My Store Inventory' : 'All Inventory'} ({baseCount.length} products, {totalStock} units)
         </h3>
         {canManage && (
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn-ghost" onClick={() => setShowSummary(s => !s)}>
               {showSummary ? '📦 Hide Daily Summary' : '📅 Daily Summary'}
             </button>
-            <button className="btn-ghost" onClick={() => setBulkModalOpen(true)}>+ Bulk Add</button>
-            <button className="btn-primary" onClick={openAdd}>+ Add Product</button>
+            {selectMode ? (
+              <>
+                <button
+                  className="btn-ghost small"
+                  style={{ color: '#dc2626' }}
+                  onClick={handleBulkDelete}
+                  disabled={selectedIds.size === 0}
+                >
+                  🗑️ Delete Selected ({selectedIds.size})
+                </button>
+                <button className="btn-ghost" onClick={toggleSelectMode}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <button className="btn-ghost" onClick={toggleSelectMode}>☑️ Select / Delete</button>
+                <button className="btn-ghost" onClick={() => setBulkModalOpen(true)}>+ Bulk Add</button>
+                <button className="btn-primary" onClick={openAdd}>+ Add Product</button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -228,6 +284,11 @@ export default function Inventory() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
+                {canManage && selectMode && (
+                  <th style={{ padding: 8 }}>
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
+                  </th>
+                )}
                 <th style={{ padding: 8 }}>Product</th>
                 <th style={{ padding: 8 }}>Size</th>
                 <th style={{ padding: 8 }}>Brand</th>
@@ -245,6 +306,15 @@ export default function Inventory() {
                 const stockColor = p.stock < 5 ? '#dc2626' : p.stock < 10 ? '#e07b2a' : '#16a34a';
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    {canManage && selectMode && (
+                      <td style={{ padding: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(String(p.id))}
+                          onChange={() => toggleSelectOne(p.id)}
+                        />
+                      </td>
+                    )}
                     <td style={{ padding: 8, fontWeight: 600 }}>{p.name}</td>
                     <td style={{ padding: 8 }}>{p.size || 'N/A'}</td>
                     <td style={{ padding: 8 }}>{p.brand || 'N/A'}</td>
@@ -266,7 +336,7 @@ export default function Inventory() {
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid #1a1a2e', background: '#f8fafc' }}>
-                <td colSpan={canManage ? 8 : 5} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total Stock (shown):</td>
+                <td colSpan={canManage ? (selectMode ? 9 : 8) : 5} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total Stock (shown):</td>
                 <td style={{ padding: 8, fontWeight: 900, color: '#0d9488' }}>{totalListStock} units</td>
                 {canManage && <td></td>}
               </tr>

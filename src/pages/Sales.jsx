@@ -84,6 +84,7 @@ export default function Sales() {
                   <th style={{ padding: 8 }}>Paid</th>
                   <th style={{ padding: 8 }}>Debt</th>
                   <th style={{ padding: 8 }}>Total Revenue</th>
+                  <th style={{ padding: 8 }}>Profit</th>
                   <th style={{ padding: 8 }}>Amount Collected</th>
                   <th style={{ padding: 8 }}>Outstanding</th>
                 </tr>
@@ -103,12 +104,13 @@ export default function Sales() {
                         <td style={{ padding: 8, color: '#16a34a' }}>{d.paidCount}</td>
                         <td style={{ padding: 8, color: '#dc2626' }}>{d.debtCount}</td>
                         <td style={{ padding: 8, fontWeight: 700, color: '#0d9488' }}>{fmtS(d.totalRevenue)}</td>
+                        <td style={{ padding: 8, fontWeight: 700, color: d.totalProfit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(d.totalProfit)}</td>
                         <td style={{ padding: 8 }}>{fmtS(d.totalPaid)}</td>
                         <td style={{ padding: 8, color: d.totalDebt > 0 ? '#dc2626' : '#64748b' }}>{fmtS(d.totalDebt)}</td>
                       </tr>
                       {isOpen && (
                         <tr>
-                          <td colSpan={7} style={{ padding: 0, background: '#f8fafc' }}>
+                          <td colSpan={8} style={{ padding: 0, background: '#f8fafc' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                               <thead>
                                 <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>
@@ -117,6 +119,7 @@ export default function Sales() {
                                   <th style={{ padding: 6 }}>Location</th>
                                   <th style={{ padding: 6 }}>Items</th>
                                   <th style={{ padding: 6 }}>Total</th>
+                                  <th style={{ padding: 6 }}>Profit</th>
                                   <th style={{ padding: 6 }}>Paid</th>
                                   <th style={{ padding: 6 }}>Status</th>
                                   <th style={{ padding: 6 }}>Method</th>
@@ -124,8 +127,10 @@ export default function Sales() {
                               </thead>
                               <tbody>
                                 {daySales.length === 0 ? (
-                                  <tr><td colSpan={8} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
-                                ) : daySales.map(s => (
+                                  <tr><td colSpan={9} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
+                                ) : daySales.map(s => {
+                                  const profit = ((s.unitPrice || 0) - (s.unitCost || 0)) * (s.quantity || 0);
+                                  return (
                                   <tr
                                     key={s.id}
                                     style={{ borderTop: '1px solid #e2e8f0', cursor: 'pointer' }}
@@ -137,6 +142,7 @@ export default function Sales() {
                                     <td style={{ padding: 6 }}>{s.locationIcon} {s.locationName}</td>
                                     <td style={{ padding: 6 }}>{s.items}</td>
                                     <td style={{ padding: 6, fontWeight: 700 }}>{fmtS(s.total)}</td>
+                                    <td style={{ padding: 6, fontWeight: 700, color: profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(profit)}</td>
                                     <td style={{ padding: 6 }}>{fmtS(s.paid)}</td>
                                     <td style={{ padding: 6 }}>
                                       <span className="badge" style={s.status === 'Paid'
@@ -147,7 +153,8 @@ export default function Sales() {
                                     </td>
                                     <td style={{ padding: 6 }}>{s.method}</td>
                                   </tr>
-                                ))}
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </td>

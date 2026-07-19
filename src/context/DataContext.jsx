@@ -129,6 +129,18 @@ export function DataProvider({ children }) {
     setProducts(prev => prev.filter(p => String(p.id) !== String(id)));
   }, []);
 
+  // KIPENGELE: "Bulk Delete" - futa bidhaa nyingi kwa wakati mmoja
+  // (mfano baada ya kuchagua nyingi kwenye Inventory kwa checkbox),
+  // badala ya kubofya futa moja moja. Query moja (IN) badala ya kuloop
+  // delete nyingi - haraka zaidi na kuepuka realtime events nyingi.
+  const bulkDeleteProducts = useCallback(async (ids) => {
+    if (!ids || ids.length === 0) return;
+    const { error } = await sb.from('products').delete().in('id', ids);
+    if (error) throw new Error(error.message);
+    const idSet = new Set(ids.map(String));
+    setProducts(prev => prev.filter(p => !idSet.has(String(p.id))));
+  }, []);
+
   const getProducts = useCallback((locationId) => (
     products.filter(p => String(p.locationId) === String(locationId))
   ), [products]);
@@ -726,12 +738,17 @@ export function DataProvider({ children }) {
       const date = s.date || (s.createdAt || '').split('T')[0];
       if (!date) return;
       map[date] = map[date] || {
-        date, count: 0, totalRevenue: 0, totalPaid: 0, totalDebt: 0, paidCount: 0, debtCount: 0,
+        date, count: 0, totalRevenue: 0, totalPaid: 0, totalDebt: 0, totalProfit: 0, paidCount: 0, debtCount: 0,
       };
       map[date].count += 1;
       map[date].totalRevenue += s.total || 0;
       map[date].totalPaid += s.paid || 0;
       map[date].totalDebt += Math.max((s.total || 0) - (s.paid || 0), 0);
+      // Profit ya mauzo haya = (Sell Price - Buy Price/Cost) x Quantity.
+      // Kwa mauzo ya "manual price" (bila bidhaa maalum kwenye stock),
+      // unitCost haijulikani (0), hivyo profit inaonekana kubwa zaidi -
+      // hii ni kikomo cha data kilichopo, si hitilafu.
+      map[date].totalProfit += ((s.unitPrice || 0) - (s.unitCost || 0)) * (s.quantity || 0);
       if (s.status === 'Paid') map[date].paidCount += 1; else map[date].debtCount += 1;
     });
     return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -1832,7 +1849,7 @@ export function DataProvider({ children }) {
     locations, stores, shops, locationsLoading,
     loadLocations, addLocation, updateLocation, deleteLocation, getLocation,
     products, productsLoading, allProductsWithLocations, getProducts, knownBrands,
-    loadProducts, addProduct, updateProduct, deleteProduct, findMatchingProduct, bulkAddProducts,
+    loadProducts, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, findMatchingProduct, bulkAddProducts,
     inventoryLogs, inventoryLogsLoading, loadInventoryLogs, dailyInventorySummary,
     sales, salesLoading, allSalesWithLocations, getSales, totalAllSales, dailySalesSummary,
     loadSales, addSale, updateSale, deleteSale,
