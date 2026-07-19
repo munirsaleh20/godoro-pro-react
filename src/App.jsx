@@ -30,7 +30,7 @@ function pageFromHash() {
 
 export default function App() {
   const { currentUser, authLoading } = useAuth();
-  const { loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions } = useData();
+  const { loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, loadInventoryLogs } = useData();
   const { showToast } = useToast();
   const [page, setPageState] = useState(pageFromHash);
   const [dataLoading, setDataLoading] = useState(false);
@@ -97,12 +97,12 @@ export default function App() {
       // hatuiiti kabisa kwake.
       const isOwnerOrManager = currentUser.role === 'owner' || currentUser.role === 'manager';
       const loaders = [loadLocations(), loadProducts(), loadSales(), loadStaff(), loadDebts(), loadExpenses(), loadTransfers()];
-      if (isOwnerOrManager) loaders.push(loadWholesaleCustomers(), loadWholesaleTransactions(), loadSuppliers(), loadSupplierTransactions());
+      if (isOwnerOrManager) loaders.push(loadWholesaleCustomers(), loadWholesaleTransactions(), loadSuppliers(), loadSupplierTransactions(), loadInventoryLogs());
       Promise.all(loaders)
         .catch((err) => showToast('Failed to load data: ' + err.message, 'error'))
         .finally(() => setDataLoading(false));
     }
-  }, [currentUser, loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, showToast]);
+  }, [currentUser, loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, loadInventoryLogs, showToast]);
 
   if (authLoading) {
     return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;

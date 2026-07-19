@@ -44,6 +44,8 @@ export function DataProvider({ children }) {
   const [suppliersLoading, setSuppliersLoading] = useState(false);
   const [supplierTransactions, setSupplierTransactions] = useState([]); // { id, supplierId, locationId, type, description, items, amount, date }
   const [supplierTransactionsLoading, setSupplierTransactionsLoading] = useState(false);
+  const [inventoryLogs, setInventoryLogs] = useState([]); // { id, locationId, productId, name, size, brand, qty, unitPrice, totalValue, isNewProduct, date }
+  const [inventoryLogsLoading, setInventoryLogsLoading] = useState(false);
 
   // ---------------- Locations ----------------
   const loadLocations = useCallback(async () => {
@@ -121,7 +123,69 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  // Inatumika na addProduct/bulkAddProducts kutafuta kama bidhaa HIYO HIYO
+  // (jina + size + brand, baada ya normalisation) tayari ipo KATIKA LOCATION
+  // HIYO HIYO - tofauti na findMatchingProduct (ambayo inaruhusu "karibiana"
+  // kwa ajili ya mauzo), hapa lazima jina, size NA brand vilingane sawasawa
+  // ili tusichanganye bidhaa mbili tofauti ziwe moja kimakosa.
+  const findExactLocationProduct = useCallback((locationId, name, size, brand) => {
+    const list = getProducts(locationId);
+    const nName = norm(name);
+    const nSize = norm(size);
+    const nBrand = norm(brand);
+    return list.find(p => (
+      norm(p.name) === nName && norm(p.size) === nSize && norm(p.brand) === nBrand
+    )) || null;
+  }, [getProducts]);
+
+  // Kumbukumbu ya "tukio" la kuongeza stock (bidhaa mpya au restock) - kwa
+  // ajili ya Muhtasari wa Kila Siku (Daily Inventory Summary). Thamani
+  // (total_value) inahesabiwa AUTOMATIC = qty x unitPrice, hivyo mtumiaji
+  // haitaji kukokotoa mwenyewe.
+  const logInventoryAddition = useCallback(async ({ locationId, productId, name, size, brand, qty, unitPrice, isNewProduct }) => {
+    const totalValue = (qty || 0) * (unitPrice || 0);
+    const { data, error } = await sb.from('inventory_logs').insert({
+      location_id: locationId, product_id: productId, product_name: name,
+      size: size || null, brand: brand || null, qty, unit_price: unitPrice,
+      total_value: totalValue, is_new_product: !!isNewProduct,
+    }).select().single();
+    if (error) { console.error('logInventoryAddition error:', error.message); return null; }
+    const log = {
+      id: data.id, locationId: data.location_id, productId: data.product_id,
+      name: data.product_name, size: data.size || '', brand: data.brand || '',
+      qty: data.qty || 0, unitPrice: data.unit_price || 0, totalValue: data.total_value || 0,
+      isNewProduct: data.is_new_product, date: (data.created_at || '').split('T')[0],
+      createdAt: data.created_at,
+    };
+    setInventoryLogs(prev => addUnique(prev, log, true));
+    return log;
+  }, []);
+
+  // KIPENGELE: "Automation ya Price" - ukiongeza bidhaa ILIYOKUWEPO TAYARI
+  // kwenye location hiyo hiyo (jina+size+brand vinalingana), badala ya
+  // kuunda mstari mpya (duplicate), tunaongeza (merge) stock ya iliyopo
+  // (stock ya zamani + qty mpya), na bei inasasishwa kwa bei mpya
+  // iliyoingizwa. Thamani ya mzigo uliongezwa (qty x bei) inahesabiwa
+  // AUTOMATIC na kurekodiwa kwenye inventory_logs - hata kama umeongeza
+  // bidhaa hiyo zaidi ya mara moja.
   const addProduct = useCallback(async ({ locationId, name, size, brand, buy, sell, stock, cat }) => {
+    const existing = findExactLocationProduct(locationId, name, size, brand);
+
+    if (existing) {
+      const newStock = (existing.stock || 0) + (parseInt(stock, 10) || 0);
+      const { error } = await sb.from('products').update({
+        stock: newStock, buy_price: buy, sell_price: sell, category: cat,
+      }).eq('id', existing.id);
+      if (error) throw new Error(error.message);
+      const merged = { ...existing, buy, sell, cat, stock: newStock };
+      setProducts(prev => prev.map(p => (String(p.id) === String(existing.id) ? merged : p)));
+      await logInventoryAddition({
+        locationId, productId: existing.id, name: merged.name, size: merged.size, brand: merged.brand,
+        qty: parseInt(stock, 10) || 0, unitPrice: sell, isNewProduct: false,
+      });
+      return { ...merged, merged: true, addedQty: parseInt(stock, 10) || 0, addedValue: (parseInt(stock, 10) || 0) * (sell || 0) };
+    }
+
     const { data, error } = await sb.from('products').insert({
       location_id: locationId, name, size, brand,
       buy_price: buy, sell_price: sell, stock, category: cat,
@@ -133,8 +197,65 @@ export function DataProvider({ children }) {
       sell: data.sell_price || 0, stock: data.stock || 0, cat: data.category || 'Spring',
     };
     setProducts(prev => addUnique(prev, product, false));
-    return product;
+    await logInventoryAddition({
+      locationId, productId: product.id, name: product.name, size: product.size, brand: product.brand,
+      qty: product.stock, unitPrice: product.sell, isNewProduct: true,
+    });
+    return { ...product, merged: false, addedQty: product.stock, addedValue: product.stock * product.sell };
+  }, [findExactLocationProduct, logInventoryAddition]);
+
+  // KIPENGELE: "Bulk Add" - ongeza bidhaa ZAIDI YA MOJA kwa wakati mmoja
+  // kwenye location moja, badala ya kuadd moja moja. Kila mstari (row)
+  // unapitia mantiki ileile ya addProduct (merge kama ipo, la sivyo unda
+  // mpya) - hivyo bei/stock/thamani zinabaki sahihi hata kama bidhaa moja
+  // imerudiwa mara kadhaa kwenye orodha hiyo hiyo.
+  const bulkAddProducts = useCallback(async (locationId, rows) => {
+    const results = [];
+    for (const row of rows) {
+      const result = await addProduct({ locationId, ...row });
+      results.push(result);
+    }
+    const totalItems = results.reduce((sum, r) => sum + (r.addedQty || 0), 0);
+    const totalValue = results.reduce((sum, r) => sum + (r.addedValue || 0), 0);
+    const mergedCount = results.filter(r => r.merged).length;
+    return { results, totalItems, totalValue, mergedCount, newCount: results.length - mergedCount };
+  }, [addProduct]);
+
+  // ---------------- Inventory Logs (kwa Muhtasari wa Kila Siku) ----------------
+  const loadInventoryLogs = useCallback(async () => {
+    setInventoryLogsLoading(true);
+    try {
+      const { data, error } = await sb.from('inventory_logs').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      setInventoryLogs((data || []).map(l => ({
+        id: l.id, locationId: l.location_id, productId: l.product_id,
+        name: l.product_name, size: l.size || '', brand: l.brand || '',
+        qty: l.qty || 0, unitPrice: l.unit_price || 0, totalValue: l.total_value || 0,
+        isNewProduct: l.is_new_product, date: (l.created_at || '').split('T')[0], createdAt: l.created_at,
+      })));
+    } catch (err) {
+      console.error('loadInventoryLogs error:', err);
+      throw err;
+    } finally {
+      setInventoryLogsLoading(false);
+    }
   }, []);
+
+  // Muhtasari wa bidhaa zilizoongezwa kwa SIKU (grouped by date) - kwa kila
+  // siku: idadi ya matukio, jumla ya units (qty) zilizoongezwa, na jumla ya
+  // thamani (qty x bei) - AUTOMATIC, bila kukokotoa kwa mkono.
+  const dailyInventorySummary = useMemo(() => {
+    const map = {};
+    inventoryLogs.forEach(l => {
+      if (!l.date) return;
+      map[l.date] = map[l.date] || { date: l.date, entries: 0, totalUnits: 0, totalValue: 0, newProducts: 0, restocks: 0 };
+      map[l.date].entries += 1;
+      map[l.date].totalUnits += l.qty || 0;
+      map[l.date].totalValue += l.totalValue || 0;
+      if (l.isNewProduct) map[l.date].newProducts += 1; else map[l.date].restocks += 1;
+    });
+    return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [inventoryLogs]);
 
   const updateProduct = useCallback(async (id, { name, size, brand, buy, sell, stock, cat }) => {
     const { error } = await sb.from('products').update({
@@ -1601,7 +1722,7 @@ export function DataProvider({ children }) {
   const loadersRef = useRef({});
   loadersRef.current = {
     loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers,
-    loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions,
+    loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, loadInventoryLogs,
   };
 
   useEffect(() => {
@@ -1617,6 +1738,7 @@ export function DataProvider({ children }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wholesale_transactions' }, () => loadersRef.current.loadWholesaleTransactions())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => loadersRef.current.loadSuppliers())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'supplier_transactions' }, () => loadersRef.current.loadSupplierTransactions())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_logs' }, () => loadersRef.current.loadInventoryLogs())
       .subscribe();
 
     return () => { sb.removeChannel(channel); };
@@ -1626,7 +1748,8 @@ export function DataProvider({ children }) {
     locations, stores, shops, locationsLoading,
     loadLocations, addLocation, updateLocation, deleteLocation, getLocation,
     products, productsLoading, allProductsWithLocations, getProducts, knownBrands,
-    loadProducts, addProduct, updateProduct, deleteProduct, findMatchingProduct,
+    loadProducts, addProduct, updateProduct, deleteProduct, findMatchingProduct, bulkAddProducts,
+    inventoryLogs, inventoryLogsLoading, loadInventoryLogs, dailyInventorySummary,
     sales, salesLoading, allSalesWithLocations, getSales, totalAllSales,
     loadSales, addSale, updateSale, deleteSale,
     debts, debtsLoading, allDebtsWithLocations, getDebts, totalAllDebts,

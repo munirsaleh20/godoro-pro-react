@@ -6,16 +6,19 @@ import { useConfirm } from '../context/ConfirmContext.jsx';
 import { fmt } from '../utils/format.js';
 import { matchesSearch } from '../utils/search.js';
 import ProductFormModal from '../components/ProductFormModal.jsx';
+import BulkAddProductsModal from '../components/BulkAddProductsModal.jsx';
 
 export default function Inventory() {
   const { isManager, isSalesperson, currentUser } = useAuth();
-  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct } = useData();
+  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkAddProducts, dailyInventorySummary } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
   const [filter, setFilter] = useState('all'); // all | store | shop
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const [mode, setMode] = useState('add');
   const [editing, setEditing] = useState(null);
 
@@ -43,7 +46,7 @@ export default function Inventory() {
     if (filter === 'shop') list = list.filter(p => p.locationType === 'shop');
   }
   if (search.trim()) {
-    list = list.filter(p => matchesSearch([p.name, p.size, p.brand, p.cat], search));
+    list = list.filter(p => matchesSearch([p.name, p.size, p.brand, p.cat, p.sell, p.buy], search));
   }
 
   const baseCount = salesView ? allProductsWithLocations.filter(p => String(p.locationId) === String(currentUser?.locationId)) : allProductsWithLocations;
@@ -55,13 +58,23 @@ export default function Inventory() {
 
   const handleSubmit = async (payload) => {
     if (mode === 'add') {
-      await addProduct(payload);
-      showToast(`✅ Product "${payload.name}" added!`);
+      const result = await addProduct(payload);
+      if (result.merged) {
+        showToast(`✅ "${payload.name}" already existed here — stock increased by ${result.addedQty} (value ${fmt(result.addedValue)})`);
+      } else {
+        showToast(`✅ Product "${payload.name}" added! (${result.addedQty} × ${fmt(payload.sell)} = ${fmt(result.addedValue)})`);
+      }
     } else {
       await updateProduct(editing.id, payload);
       showToast(`✅ Product "${payload.name}" updated!`);
     }
     setModalOpen(false);
+  };
+
+  const handleBulkSubmit = async (locationId, rows) => {
+    const summary = await bulkAddProducts(locationId, rows);
+    showToast(`✅ ${rows.length} products processed (${summary.newCount} new, ${summary.mergedCount} restocked) — total value ${fmt(summary.totalValue)}`);
+    setBulkModalOpen(false);
   };
 
   const handleDelete = async (p) => {
@@ -81,8 +94,52 @@ export default function Inventory() {
         <h3 className="section-title">
           📦 {salesView ? 'My Store Inventory' : 'All Inventory'} ({baseCount.length} products, {totalStock} units)
         </h3>
-        {canManage && <button className="btn-primary" onClick={openAdd}>+ Add Product</button>}
+        {canManage && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-ghost" onClick={() => setShowSummary(s => !s)}>
+              {showSummary ? '📦 Hide Daily Summary' : '📅 Daily Summary'}
+            </button>
+            <button className="btn-ghost" onClick={() => setBulkModalOpen(true)}>+ Bulk Add</button>
+            <button className="btn-primary" onClick={openAdd}>+ Add Product</button>
+          </div>
+        )}
       </div>
+
+      {canManage && showSummary && (
+        <div className="table-container" style={{ overflowX: 'auto', marginBottom: 16 }}>
+          <h3 className="section-title" style={{ margin: '0 0 12px' }}>📅 Muhtasari wa Bidhaa Zilizoongezwa kwa Siku</h3>
+          {dailyInventorySummary.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📅</div>
+              <div className="empty-title">No Data Yet</div>
+              <div>Ongeza bidhaa ili muhtasari uonekane hapa</div>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
+                  <th style={{ padding: 8 }}>Date</th>
+                  <th style={{ padding: 8 }}>New Products</th>
+                  <th style={{ padding: 8 }}>Restocks</th>
+                  <th style={{ padding: 8 }}>Units Added</th>
+                  <th style={{ padding: 8 }}>Total Value (Auto)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyInventorySummary.map(d => (
+                  <tr key={d.date} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: 8 }}>{d.date}</td>
+                    <td style={{ padding: 8 }}>{d.newProducts}</td>
+                    <td style={{ padding: 8 }}>{d.restocks}</td>
+                    <td style={{ padding: 8, fontWeight: 700 }}>{d.totalUnits}</td>
+                    <td style={{ padding: 8, fontWeight: 700, color: '#0d9488' }}>{fmt(d.totalValue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
         {canManage && ['all', 'store', 'shop'].map(f => (
@@ -98,7 +155,7 @@ export default function Inventory() {
         <input
           className="form-input"
           style={{ maxWidth: 240 }}
-          placeholder="Search by name, brand, category..."
+          placeholder="Search by name, size, brand, or price..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -171,6 +228,15 @@ export default function Inventory() {
           locationOptions={locations}
           onClose={() => setModalOpen(false)}
           onSubmit={handleSubmit}
+        />
+      )}
+
+      {canManage && (
+        <BulkAddProductsModal
+          open={bulkModalOpen}
+          locationOptions={locations}
+          onClose={() => setBulkModalOpen(false)}
+          onSubmit={handleBulkSubmit}
         />
       )}
     </div>

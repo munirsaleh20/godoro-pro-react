@@ -26,10 +26,17 @@ export default function AddSaleModal({ open, lockedLocationId, onClose }) {
   const [form, setForm] = useState(emptyForm(lockedLocationId));
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+  // KIPENGELE: "Selling price x items ijijaze automatic unless less paid" -
+  // Amount Paid inajijaza AUTOMATIC sawa na Total (Selling Price x Qty) kila
+  // total inapobadilika - MRADI TU mtumiaji hajaigusa (edit) kwa mkono bado.
+  // Akiigusa (mfano mteja amelipa KIDOGO - deni), tunaacha kuigusa tena
+  // moja kwa moja, ili asiwe na shida ya kuandika upya kiasi alichoweka.
+  const [paidTouched, setPaidTouched] = useState(false);
 
   useEffect(() => {
     if (open) {
       setForm(emptyForm(lockedLocationId));
+      setPaidTouched(false);
       setErr('');
     }
   }, [open, lockedLocationId]);
@@ -48,6 +55,15 @@ export default function AddSaleModal({ open, lockedLocationId, onClose }) {
   const total = unitPrice * quantity;
   const paid = parseFloat(form.paid) || 0;
   const balance = Math.max(0, total - paid);
+
+  // Auto-jaza "Amount Paid" na Total kila Total inapobadilika (bei, qty, au
+  // bidhaa) - isipokuwa mtumiaji ameshaigusa field hiyo kwa mkono (kwa
+  // mfano kuweka malipo pungufu kwa mteja wa deni).
+  useEffect(() => {
+    if (!open || paidTouched) return;
+    setForm(f => ({ ...f, paid: total > 0 ? String(total) : '' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, open, paidTouched]);
 
   const handleSave = async () => {
     setErr('');
@@ -192,7 +208,10 @@ export default function AddSaleModal({ open, lockedLocationId, onClose }) {
       <div className="form-group">
         <label className="form-label">Amount Paid (TZS)</label>
         <input className="form-input" type="number" placeholder="0" value={form.paid}
-          onChange={(e) => setForm({ ...form, paid: e.target.value })} />
+          onChange={(e) => { setPaidTouched(true); setForm({ ...form, paid: e.target.value }); }} />
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+          Auto-fills to match Total. Change it only if the customer paid less (creates a debt).
+        </div>
       </div>
 
       <div className="form-actions">
