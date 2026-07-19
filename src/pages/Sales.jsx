@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -16,6 +16,7 @@ export default function Sales() {
   const [addOpen, setAddOpen] = useState(false);
   const [editSale, setEditSale] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
+  const [expandedSalesDate, setExpandedSalesDate] = useState(null);
 
   const manager = isManager();
   const myLocationId = currentUser?.locationId;
@@ -88,17 +89,73 @@ export default function Sales() {
                 </tr>
               </thead>
               <tbody>
-                {dailySalesSummary.map(d => (
-                  <tr key={d.date} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: 8 }}>{d.date}</td>
-                    <td style={{ padding: 8, fontWeight: 700 }}>{d.count}</td>
-                    <td style={{ padding: 8, color: '#16a34a' }}>{d.paidCount}</td>
-                    <td style={{ padding: 8, color: '#dc2626' }}>{d.debtCount}</td>
-                    <td style={{ padding: 8, fontWeight: 700, color: '#0d9488' }}>{fmtS(d.totalRevenue)}</td>
-                    <td style={{ padding: 8 }}>{fmtS(d.totalPaid)}</td>
-                    <td style={{ padding: 8, color: d.totalDebt > 0 ? '#dc2626' : '#64748b' }}>{fmtS(d.totalDebt)}</td>
-                  </tr>
-                ))}
+                {dailySalesSummary.map(d => {
+                  const isOpen = expandedSalesDate === d.date;
+                  const daySales = isOpen ? allSalesWithLocations.filter(s => s.date === d.date) : [];
+                  return (
+                    <Fragment key={d.date}>
+                      <tr
+                        style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+                        onClick={() => setExpandedSalesDate(isOpen ? null : d.date)}
+                      >
+                        <td style={{ padding: 8 }}>{isOpen ? '▾' : '▸'} {d.date}</td>
+                        <td style={{ padding: 8, fontWeight: 700 }}>{d.count}</td>
+                        <td style={{ padding: 8, color: '#16a34a' }}>{d.paidCount}</td>
+                        <td style={{ padding: 8, color: '#dc2626' }}>{d.debtCount}</td>
+                        <td style={{ padding: 8, fontWeight: 700, color: '#0d9488' }}>{fmtS(d.totalRevenue)}</td>
+                        <td style={{ padding: 8 }}>{fmtS(d.totalPaid)}</td>
+                        <td style={{ padding: 8, color: d.totalDebt > 0 ? '#dc2626' : '#64748b' }}>{fmtS(d.totalDebt)}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={7} style={{ padding: 0, background: '#f8fafc' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>
+                                  <th style={{ padding: '6px 8px 6px 28px' }}>Customer</th>
+                                  <th style={{ padding: 6 }}>Staff</th>
+                                  <th style={{ padding: 6 }}>Location</th>
+                                  <th style={{ padding: 6 }}>Items</th>
+                                  <th style={{ padding: 6 }}>Total</th>
+                                  <th style={{ padding: 6 }}>Paid</th>
+                                  <th style={{ padding: 6 }}>Status</th>
+                                  <th style={{ padding: 6 }}>Method</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {daySales.length === 0 ? (
+                                  <tr><td colSpan={8} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
+                                ) : daySales.map(s => (
+                                  <tr
+                                    key={s.id}
+                                    style={{ borderTop: '1px solid #e2e8f0', cursor: 'pointer' }}
+                                    onClick={() => setEditSale(s)}
+                                    title="Bofya kuona details"
+                                  >
+                                    <td style={{ padding: '6px 8px 6px 28px', fontWeight: 600 }}>{s.customer}</td>
+                                    <td style={{ padding: 6, fontSize: 12 }}>👤 {getStaffName(s.staffId)}</td>
+                                    <td style={{ padding: 6 }}>{s.locationIcon} {s.locationName}</td>
+                                    <td style={{ padding: 6 }}>{s.items}</td>
+                                    <td style={{ padding: 6, fontWeight: 700 }}>{fmtS(s.total)}</td>
+                                    <td style={{ padding: 6 }}>{fmtS(s.paid)}</td>
+                                    <td style={{ padding: 6 }}>
+                                      <span className="badge" style={s.status === 'Paid'
+                                        ? { background: 'rgba(22,163,74,0.1)', color: '#16a34a' }
+                                        : { background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
+                                        {s.status}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: 6 }}>{s.method}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}

@@ -1787,24 +1787,46 @@ export function DataProvider({ children }) {
     loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, loadInventoryLogs,
   };
 
+  // FIX: awali kila TUKIO la realtime (insert/update/delete) lilikuwa
+  // likisababisha reload YAKE mara moja. Wakati wa Bulk Add (matukio
+  // mengi kwa haraka mfululizo - kila row ni insert/update tofauti),
+  // maombi kadhaa ya reload yanaweza kuwa "yanaruka" kwa wakati mmoja
+  // (in-flight), na jibu la mwisho kuwasili "nje ya mpangilio" (out of
+  // order) linaweza ku-overwrite state na taarifa ya ZAMANI zaidi -
+  // matokeo yake bidhaa mpya zilizoongezwa kwa Bulk Add zinaonekana
+  // "kutoweka" kwa muda mfupi kwenye Inventory ya location husika, mpaka
+  // mabadiliko mengine yatokee. Hapa tunatumia "debounce" - matukio ya
+  // haraka haraka yanaunganishwa kuwa reload MOJA, baada ya mambo
+  // kutulia, hivyo hakuna hatari ya majibu kuwasili nje ya mpangilio.
+  const reloadTimersRef = useRef({});
+  const debouncedReload = useCallback((key, delay = 400) => {
+    if (reloadTimersRef.current[key]) clearTimeout(reloadTimersRef.current[key]);
+    reloadTimersRef.current[key] = setTimeout(() => {
+      loadersRef.current[key]?.();
+    }, delay);
+  }, []);
+
   useEffect(() => {
     const channel = sb.channel('godoro-live-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'locations' }, () => loadersRef.current.loadLocations())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => loadersRef.current.loadProducts())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => loadersRef.current.loadSales())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, () => loadersRef.current.loadStaff())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'debts' }, () => loadersRef.current.loadDebts())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => loadersRef.current.loadExpenses())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transfers' }, () => loadersRef.current.loadTransfers())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wholesale_customers' }, () => loadersRef.current.loadWholesaleCustomers())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wholesale_transactions' }, () => loadersRef.current.loadWholesaleTransactions())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => loadersRef.current.loadSuppliers())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'supplier_transactions' }, () => loadersRef.current.loadSupplierTransactions())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_logs' }, () => loadersRef.current.loadInventoryLogs())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'locations' }, () => debouncedReload('loadLocations'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => debouncedReload('loadProducts'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => debouncedReload('loadSales'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, () => debouncedReload('loadStaff'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'debts' }, () => debouncedReload('loadDebts'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => debouncedReload('loadExpenses'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transfers' }, () => debouncedReload('loadTransfers'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wholesale_customers' }, () => debouncedReload('loadWholesaleCustomers'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wholesale_transactions' }, () => debouncedReload('loadWholesaleTransactions'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => debouncedReload('loadSuppliers'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'supplier_transactions' }, () => debouncedReload('loadSupplierTransactions'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_logs' }, () => debouncedReload('loadInventoryLogs'))
       .subscribe();
 
-    return () => { sb.removeChannel(channel); };
-  }, []);
+    return () => {
+      sb.removeChannel(channel);
+      Object.values(reloadTimersRef.current).forEach(clearTimeout);
+    };
+  }, [debouncedReload]);
 
   const value = {
     locations, stores, shops, locationsLoading,
