@@ -9,12 +9,13 @@ import EditSaleModal from '../components/EditSaleModal.jsx';
 
 export default function Sales() {
   const { currentUser, isManager } = useAuth();
-  const { allSalesWithLocations, getSales, totalAllSales, deleteSale, getLocation, getStaffName } = useData();
+  const { allSalesWithLocations, getSales, totalAllSales, deleteSale, getLocation, getStaffName, dailySalesSummary } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
   const [addOpen, setAddOpen] = useState(false);
   const [editSale, setEditSale] = useState(null);
+  const [showSummary, setShowSummary] = useState(false);
 
   const manager = isManager();
   const myLocationId = currentUser?.locationId;
@@ -54,8 +55,55 @@ export default function Sales() {
             {manager ? 'All Locations' : myLocation?.name} · Total: <strong>{fmtS(total)}</strong>
           </div>
         </div>
-        {manager && <button className="btn-primary" onClick={() => setAddOpen(true)}>+ New Sale</button>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {manager && (
+            <button className="btn-ghost" onClick={() => setShowSummary(s => !s)}>
+              {showSummary ? '🛒 Hide Daily Summary' : '📅 Daily Summary'}
+            </button>
+          )}
+          {manager && <button className="btn-primary" onClick={() => setAddOpen(true)}>+ New Sale</button>}
+        </div>
       </div>
+
+      {manager && showSummary && (
+        <div className="table-container" style={{ overflowX: 'auto', marginBottom: 16 }}>
+          <h3 className="section-title" style={{ margin: '0 0 12px' }}>📅 Muhtasari wa Mauzo kwa Siku</h3>
+          {dailySalesSummary.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📅</div>
+              <div className="empty-title">No Data Yet</div>
+              <div>Fanya mauzo ili muhtasari uonekane hapa</div>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
+                  <th style={{ padding: 8 }}>Date</th>
+                  <th style={{ padding: 8 }}>Sales</th>
+                  <th style={{ padding: 8 }}>Paid</th>
+                  <th style={{ padding: 8 }}>Debt</th>
+                  <th style={{ padding: 8 }}>Total Revenue</th>
+                  <th style={{ padding: 8 }}>Amount Collected</th>
+                  <th style={{ padding: 8 }}>Outstanding</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailySalesSummary.map(d => (
+                  <tr key={d.date} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: 8 }}>{d.date}</td>
+                    <td style={{ padding: 8, fontWeight: 700 }}>{d.count}</td>
+                    <td style={{ padding: 8, color: '#16a34a' }}>{d.paidCount}</td>
+                    <td style={{ padding: 8, color: '#dc2626' }}>{d.debtCount}</td>
+                    <td style={{ padding: 8, fontWeight: 700, color: '#0d9488' }}>{fmtS(d.totalRevenue)}</td>
+                    <td style={{ padding: 8 }}>{fmtS(d.totalPaid)}</td>
+                    <td style={{ padding: 8, color: d.totalDebt > 0 ? '#dc2626' : '#64748b' }}>{fmtS(d.totalDebt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       <div style={{ overflowX: 'auto' }}>
         {list.length === 0 ? (

@@ -26,9 +26,12 @@ const emptyRow = () => ({
 // bidhaa iliyokuwepo tayari badala ya kuunda duplicate.
 export default function BulkAddProductsModal({ open, locationOptions, onClose, onSubmit }) {
   const { isManager } = useAuth();
-  const { knownBrands } = useData();
+  const { knownBrands, getProducts } = useData();
   const [locationId, setLocationId] = useState('');
   const [rows, setRows] = useState([emptyRow()]);
+  // Rows ambazo mtumiaji AMEBADILI bei kwa mkono - kwa hizi hatutabadilisha
+  // bei kiotomatiki tena hata akibadili jina/size/brand baadaye.
+  const [manualPriceRows, setManualPriceRows] = useState(() => new Set());
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -37,13 +40,77 @@ export default function BulkAddProductsModal({ open, locationOptions, onClose, o
     setErr('');
     setLocationId(locationOptions?.[0]?.id || '');
     setRows([emptyRow()]);
+    setManualPriceRows(new Set());
   }, [open, locationOptions]);
 
-  const updateRow = (idx, patch) => {
-    setRows(prev => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const norm = (s) => (s || '').toString().trim().toLowerCase();
+
+  // KIPENGELE: "Auto-fill Price" - kama bidhaa hii (jina+size+brand) tayari
+  // ipo kwenye duka lililochaguliwa, tunachukua Buy/Sell Price yake ya sasa
+  // moja kwa moja, badala ya kumlazimu mtumiaji kuandika bei upya kila mara.
+  // Bei bado inabaki EDITABLE - akiibadilisha kwa mkono, hatuigusi tena.
+  const findPriceMatch = (name, size, brand) => {
+    if (!locationId || !name) return null;
+    return getProducts(locationId).find(p => (
+      norm(p.name) === norm(name) && norm(p.size) === norm(size) && norm(p.brand) === norm(brand)
+    )) || null;
   };
+
+  const updateRow = (idx, patch) => {
+    const touchesPrice = 'buy' in patch || 'sell' in patch;
+    if (touchesPrice) setManualPriceRows(prev => new Set(prev).add(idx));
+
+    setRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r;
+      const merged = { ...r, ...patch };
+      if (touchesPrice || manualPriceRows.has(idx)) return merged;
+
+      const touchesIdentity = ['nameSel', 'nameOther', 'sizeSel', 'sizeOther', 'brandSel', 'brandOther'].some(k => k in patch);
+      if (!touchesIdentity) return merged;
+
+      const name = merged.nameSel === OTHER_VALUE ? merged.nameOther.trim() : merged.nameSel;
+      const size = merged.sizeSel === OTHER_VALUE ? merged.sizeOther.trim() : merged.sizeSel;
+      const brand = merged.brandSel === OTHER_VALUE ? merged.brandOther.trim() : merged.brandSel;
+      const match = findPriceMatch(name, size, brand);
+      if (match) {
+        return {
+          ...merged,
+          buy: match.buy ? String(match.buy) : merged.buy,
+          sell: match.sell ? String(match.sell) : merged.sell,
+        };
+      }
+      return merged;
+    }));
+  };
+
+  // Ukibadilisha Duka/Location, jaribu tena auto-fill kwa rows ambazo
+  // hazijaguswa kwa mkono (bei inaweza kutofautiana kati ya maduka).
+  useEffect(() => {
+    if (!open || !locationId) return;
+    setRows(prev => prev.map((r, idx) => {
+      if (manualPriceRows.has(idx)) return r;
+      const name = r.nameSel === OTHER_VALUE ? r.nameOther.trim() : r.nameSel;
+      if (!name) return r;
+      const size = r.sizeSel === OTHER_VALUE ? r.sizeOther.trim() : r.sizeSel;
+      const brand = r.brandSel === OTHER_VALUE ? r.brandOther.trim() : r.brandSel;
+      const match = findPriceMatch(name, size, brand);
+      if (match) {
+        return { ...r, buy: match.buy ? String(match.buy) : r.buy, sell: match.sell ? String(match.sell) : r.sell };
+      }
+      return r;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationId, open]);
+
   const addRow = () => setRows(prev => [...prev, emptyRow()]);
-  const removeRow = (idx) => setRows(prev => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+  const removeRow = (idx) => {
+    setRows(prev => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+    setManualPriceRows(prev => {
+      const next = new Set();
+      prev.forEach(i => { if (i < idx) next.add(i); else if (i > idx) next.add(i - 1); });
+      return next;
+    });
+  };
 
   const resolved = rows.map(r => {
     const name = r.nameSel === OTHER_VALUE ? r.nameOther.trim() : r.nameSel;

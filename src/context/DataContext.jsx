@@ -123,15 +123,6 @@ export function DataProvider({ children }) {
     }
   }, []);
 
-  const updateProduct = useCallback(async (id, { name, size, brand, buy, sell, stock, cat }) => {
-    const { error } = await sb.from('products').update({
-      name, size, brand, buy_price: buy, sell_price: sell, stock, category: cat,
-    }).eq('id', id);
-    if (error) throw new Error(error.message);
-    setProducts(prev => prev.map(p => (String(p.id) === String(id)
-      ? { ...p, name, size, brand, buy, sell, stock, cat } : p)));
-  }, []);
-
   const deleteProduct = useCallback(async (id) => {
     const { error } = await sb.from('products').delete().eq('id', id);
     if (error) throw new Error(error.message);
@@ -233,6 +224,36 @@ export function DataProvider({ children }) {
     return log;
   }, []);
 
+  // FIX: awali "Edit Product" (updateProduct) ilikuwa ikibadilisha stock
+  // moja kwa moja kwenye jedwali la products BILA kuandika kwenye
+  // inventory_logs - hivyo Muhtasari wa Kila Siku (Daily Summary) ulikuwa
+  // haujumuishi ongezeko lolote la stock lililofanywa kwa njia ya Edit
+  // (tofauti na "Add Product" / "Bulk Add" ambazo zinaandika logs).
+  // Mfano wa tatizo: mtumiaji anaongeza bidhaa 3 kwa "Add Product" (logiwa),
+  // kisha anaongeza 2 zaidi kwa "Edit" (HAIJAWAHI kulogiwa) - stock halisi
+  // inakuwa 5 lakini Summary inaonyesha 3 tu. Sasa: ikiwa Edit inaongeza
+  // stock (newStock > stock ya awali), ongezeko (delta) linalogiwa kama
+  // "restock" ile ile, ili Muhtasari uwe sahihi bila kujali njia iliyotumika.
+  const updateProduct = useCallback(async (id, { name, size, brand, buy, sell, stock, cat }) => {
+    const prevProduct = products.find(p => String(p.id) === String(id));
+    const prevStock = prevProduct ? (prevProduct.stock || 0) : 0;
+    const newStock = parseInt(stock, 10) || 0;
+
+    const { error } = await sb.from('products').update({
+      name, size, brand, buy_price: buy, sell_price: sell, stock, category: cat,
+    }).eq('id', id);
+    if (error) throw new Error(error.message);
+    setProducts(prev => prev.map(p => (String(p.id) === String(id)
+      ? { ...p, name, size, brand, buy, sell, stock, cat } : p)));
+
+    if (prevProduct && newStock > prevStock) {
+      await logInventoryAddition({
+        locationId: prevProduct.locationId, productId: id, name, size, brand,
+        qty: newStock - prevStock, unitPrice: sell, isNewProduct: false,
+      });
+    }
+  }, [products, logInventoryAddition]);
+
   // KIPENGELE: "Automation ya Price" - ukiongeza bidhaa ILIYOKUWEPO TAYARI
   // kwenye location hiyo hiyo (jina+size+brand vinalingana), badala ya
   // kuunda mstari mpya (duplicate), tunaongeza (merge) stock ya iliyopo
@@ -240,8 +261,11 @@ export function DataProvider({ children }) {
   // iliyoingizwa. Thamani ya mzigo uliongezwa (qty x bei) inahesabiwa
   // AUTOMATIC na kurekodiwa kwenye inventory_logs - hata kama umeongeza
   // bidhaa hiyo zaidi ya mara moja.
-  const addProduct = useCallback(async ({ locationId, name, size, brand, buy, sell, stock, cat }) => {
-    const existing = findExactLocationProduct(locationId, name, size, brand);
+  const addProduct = useCallback(async ({ locationId, name, size, brand, buy, sell, stock, cat }, batchOverride = null) => {
+    // `batchOverride`: inatumika na bulkAddProducts pekee - inapotolewa,
+    // inachukua nafasi ya kutafuta kwenye `products` state (ambayo bado
+    // haijasasishwa/re-render kati ya rows za bulk add hiyo hiyo).
+    const existing = batchOverride || findExactLocationProduct(locationId, name, size, brand);
 
     if (existing) {
       const newStock = (existing.stock || 0) + (parseInt(stock, 10) || 0);
@@ -283,9 +307,26 @@ export function DataProvider({ children }) {
   // imerudiwa mara kadhaa kwenye orodha hiyo hiyo.
   const bulkAddProducts = useCallback(async (locationId, rows) => {
     const results = [];
+    // FIX: awali kila `addProduct` kwenye loop hii ilikuwa ikitafuta bidhaa
+    // iliyopo kwa kutumia `products` state ya React - lakini state hiyo
+    // HAIJASASISHWA (re-render) mpaka loop nzima imalize (setProducts ni
+    // async). Hivyo bidhaa hiyo hiyo ikijitokeza mara 2+ kwenye Bulk Add
+    // MOJA (mfano jina limerudiwa), row ya pili haikuweza kuiona ya kwanza
+    // kama "existing" - ikaunda duplicate badala ya ku-merge, na stock/qty
+    // za logs zikawa si sahihi. `batchProducts` hapa chini inafuatilia
+    // matokeo ndani ya batch hii moja moja, ili row inayofuata ione
+    // ongezeko la stock la row iliyotangulia mara moja.
+    const batchProducts = [];
+    const n = (s) => (s || '').toString().trim().toLowerCase();
     for (const row of rows) {
-      const result = await addProduct({ locationId, ...row });
+      const localMatch = batchProducts.find(p => (
+        String(p.locationId) === String(locationId) && n(p.name) === n(row.name) && n(p.size) === n(row.size) && n(p.brand) === n(row.brand)
+      )) || null;
+      const result = await addProduct({ locationId, ...row }, localMatch);
       results.push(result);
+      const idx = batchProducts.findIndex(p => String(p.id) === String(result.id));
+      const tracked = { id: result.id, locationId, name: result.name, size: result.size, brand: result.brand, stock: result.stock };
+      if (idx >= 0) batchProducts[idx] = tracked; else batchProducts.push(tracked);
     }
     const totalItems = results.reduce((sum, r) => sum + (r.addedQty || 0), 0);
     const totalValue = results.reduce((sum, r) => sum + (r.addedValue || 0), 0);
@@ -674,6 +715,27 @@ export function DataProvider({ children }) {
   }, [sales, getLocation]);
 
   const totalAllSales = useMemo(() => sales.reduce((sum, s) => sum + (s.total || 0), 0), [sales]);
+
+  // KIPENGELE: "Muhtasari wa Mauzo kwa Siku" (Daily Sales Summary) - sawa
+  // na dailyInventorySummary, lakini kwa upande wa Sales: kwa kila siku
+  // tunaonyesha idadi ya mauzo, jumla ya mapato (revenue), kiasi
+  // kilicholipwa, deni lililobaki, na mgawanyo wa Cash/Lipa Namba/Bank/Debt.
+  const dailySalesSummary = useMemo(() => {
+    const map = {};
+    sales.forEach(s => {
+      const date = s.date || (s.createdAt || '').split('T')[0];
+      if (!date) return;
+      map[date] = map[date] || {
+        date, count: 0, totalRevenue: 0, totalPaid: 0, totalDebt: 0, paidCount: 0, debtCount: 0,
+      };
+      map[date].count += 1;
+      map[date].totalRevenue += s.total || 0;
+      map[date].totalPaid += s.paid || 0;
+      map[date].totalDebt += Math.max((s.total || 0) - (s.paid || 0), 0);
+      if (s.status === 'Paid') map[date].paidCount += 1; else map[date].debtCount += 1;
+    });
+    return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [sales]);
 
   // ---------------- Staff ----------------
   const loadStaff = useCallback(async () => {
@@ -1750,7 +1812,7 @@ export function DataProvider({ children }) {
     products, productsLoading, allProductsWithLocations, getProducts, knownBrands,
     loadProducts, addProduct, updateProduct, deleteProduct, findMatchingProduct, bulkAddProducts,
     inventoryLogs, inventoryLogsLoading, loadInventoryLogs, dailyInventorySummary,
-    sales, salesLoading, allSalesWithLocations, getSales, totalAllSales,
+    sales, salesLoading, allSalesWithLocations, getSales, totalAllSales, dailySalesSummary,
     loadSales, addSale, updateSale, deleteSale,
     debts, debtsLoading, allDebtsWithLocations, getDebts, totalAllDebts,
     loadDebts, markDebtPaid, recordDebtPayment, deleteDebt,
