@@ -129,7 +129,7 @@ export default function Sales() {
                                 {daySales.length === 0 ? (
                                   <tr><td colSpan={9} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
                                 ) : daySales.map(s => {
-                                  const profit = ((s.unitPrice || 0) - (s.unitCost || 0)) * (s.quantity || 0);
+                                  const profit = (s.total || 0) - ((s.unitCost || 0) * (s.quantity || 0));
                                   return (
                                   <tr
                                     key={s.id}
@@ -185,7 +185,8 @@ export default function Sales() {
                 <th style={{ padding: 8 }}>Customer</th>
                 <th style={{ padding: 8 }}>Items</th>
                 {manager && <th style={{ padding: 8 }}>Location</th>}
-                <th style={{ padding: 8 }}>Total</th>
+                {manager && <th style={{ padding: 8 }}>Buying Price</th>}
+                {manager && <th style={{ padding: 8 }}>Profit</th>}
                 <th style={{ padding: 8 }}>Paid</th>
                 <th style={{ padding: 8 }}>Status</th>
                 <th style={{ padding: 8 }}>Method</th>
@@ -203,7 +204,12 @@ export default function Sales() {
                   </td>
                   <td style={{ padding: 8 }}>{s.items}</td>
                   {manager && <td style={{ padding: 8 }}>{s.locationIcon} {s.locationName}</td>}
-                  <td style={{ padding: 8, fontWeight: 700 }}>{fmtS(s.total)}</td>
+                  {manager && <td style={{ padding: 8, fontWeight: 700, color: '#94a3b8' }}>{fmtS((s.unitCost || 0) * (s.quantity || 0))}</td>}
+                  {manager && (
+                    <td style={{ padding: 8, fontWeight: 700, color: ((s.total || 0) - (s.unitCost || 0) * (s.quantity || 0)) >= 0 ? '#16a34a' : '#dc2626' }}>
+                      {fmtS((s.total || 0) - (s.unitCost || 0) * (s.quantity || 0))}
+                    </td>
+                  )}
                   <td style={{ padding: 8 }}>{fmtS(s.paid)}</td>
                   <td style={{ padding: 8 }}>
                     <span className="badge" style={s.status === 'Paid'

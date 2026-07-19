@@ -366,6 +366,35 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  // KIPENGELE: "Delete" rekodi ya inventory_logs (mfano bidhaa iliongezwa
+  // kimakosa, au idadi si sahihi) - kutoka kwenye Daily Summary (Inventory).
+  // Kwa kuwa rekodi hii inawakilisha "stock ILIYOONGEZWA", tunaporudi
+  // nyuma (delete), tunapunguza stock ya bidhaa husika kwa kiasi (qty)
+  // kilichokuwa kwenye log hiyo - sawa na jinsi deleteSale inavyorudisha
+  // stock ilipofuta mauzo. Stock haiwezi kwenda chini ya 0 (mfano bidhaa
+  // hiyo tayari imeuzwa baadaye - hatutaki namba hasi).
+  const deleteInventoryLog = useCallback(async (id) => {
+    const log = inventoryLogs.find(l => String(l.id) === String(id));
+
+    const { data: deletedRows, error } = await sb.from('inventory_logs').delete().eq('id', id).select();
+    if (error) throw new Error(error.message);
+    if (!deletedRows || deletedRows.length === 0) {
+      throw new Error('Huna ruhusa ya kufuta rekodi hii (au tayari imefutwa). Owner na Manager tu ndio wanaruhusiwa.');
+    }
+
+    setInventoryLogs(prev => prev.filter(l => String(l.id) !== String(id)));
+
+    if (log && log.productId) {
+      const product = products.find(p => String(p.id) === String(log.productId));
+      if (product) {
+        const newStock = Math.max((product.stock || 0) - (log.qty || 0), 0);
+        const { error: stockError } = await sb.from('products').update({ stock: newStock }).eq('id', product.id);
+        if (stockError) console.error('Failed to adjust stock after log delete:', stockError);
+        else setProducts(prev => prev.map(p => (String(p.id) === String(product.id) ? { ...p, stock: newStock } : p)));
+      }
+    }
+  }, [inventoryLogs, products]);
+
   // Muhtasari wa bidhaa zilizoongezwa kwa SIKU (grouped by date) - kwa kila
   // siku: idadi ya matukio, jumla ya units (qty) zilizoongezwa, na jumla ya
   // thamani (qty x bei) - AUTOMATIC, bila kukokotoa kwa mkono.
@@ -744,11 +773,17 @@ export function DataProvider({ children }) {
       map[date].totalRevenue += s.total || 0;
       map[date].totalPaid += s.paid || 0;
       map[date].totalDebt += Math.max((s.total || 0) - (s.paid || 0), 0);
-      // Profit ya mauzo haya = (Sell Price - Buy Price/Cost) x Quantity.
-      // Kwa mauzo ya "manual price" (bila bidhaa maalum kwenye stock),
-      // unitCost haijulikani (0), hivyo profit inaonekana kubwa zaidi -
-      // hii ni kikomo cha data kilichopo, si hitilafu.
-      map[date].totalProfit += ((s.unitPrice || 0) - (s.unitCost || 0)) * (s.quantity || 0);
+      // FIX: awali profit ilikokotolewa kwa (unitPrice - unitCost) x qty -
+      // bei ya MWANZO ya mauzo. Lakini "Edit Sale" inaruhusu Manager
+      // kubadilisha TOTAL peke yake (mfano punguzo la bei kwa mteja/
+      // makubaliano), bila kusasisha unitPrice - hivyo profit ilikuwa
+      // "imekwama" kwenye bei ya mwanzo na kuacha mabaki madogo ya ajabu
+      // (mfano TZS 295, 380) yasiyoendana na Total halisi aliyokubaliana
+      // nayo mteja. Sasa: Profit = TOTAL halisi (ilivyo sasa, ikiwemo
+      // punguzo lolote) MINUS gharama ya ununuzi (unitCost x quantity) -
+      // hii inaendana na Total na Buying Price zinazoonekana kwenye
+      // jedwali, badala ya thamani ya ndani isiyoonekana popote.
+      map[date].totalProfit += (s.total || 0) - ((s.unitCost || 0) * (s.quantity || 0));
       if (s.status === 'Paid') map[date].paidCount += 1; else map[date].debtCount += 1;
     });
     return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -1850,7 +1885,7 @@ export function DataProvider({ children }) {
     loadLocations, addLocation, updateLocation, deleteLocation, getLocation,
     products, productsLoading, allProductsWithLocations, getProducts, knownBrands,
     loadProducts, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, findMatchingProduct, bulkAddProducts,
-    inventoryLogs, inventoryLogsLoading, loadInventoryLogs, dailyInventorySummary,
+    inventoryLogs, inventoryLogsLoading, loadInventoryLogs, dailyInventorySummary, deleteInventoryLog,
     sales, salesLoading, allSalesWithLocations, getSales, totalAllSales, dailySalesSummary,
     loadSales, addSale, updateSale, deleteSale,
     debts, debtsLoading, allDebtsWithLocations, getDebts, totalAllDebts,

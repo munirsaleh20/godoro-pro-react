@@ -10,7 +10,7 @@ import BulkAddProductsModal from '../components/BulkAddProductsModal.jsx';
 
 export default function Inventory() {
   const { isManager, isSalesperson, currentUser } = useAuth();
-  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, bulkAddProducts, dailyInventorySummary, inventoryLogs } = useData();
+  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, bulkAddProducts, dailyInventorySummary, inventoryLogs, deleteInventoryLog } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
@@ -128,6 +128,17 @@ export default function Inventory() {
     }
   };
 
+  const handleDeleteLog = async (log) => {
+    const ok = await confirmAction(`Delete this log entry?\n\n"${log.name}" — ${log.qty} units on ${log.date}\n\nStock ya bidhaa husika itapunguzwa kwa ${log.qty} (haitakwenda chini ya 0). Hii haiwezi kurudishwa.`);
+    if (!ok) return;
+    try {
+      await deleteInventoryLog(log.id);
+      showToast('🗑️ Log entry deleted');
+    } catch (err) {
+      showToast('Failed to delete: ' + err.message, 'error');
+    }
+  };
+
   return (
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
@@ -212,11 +223,12 @@ export default function Inventory() {
                                   <th style={{ padding: 6 }}>Qty</th>
                                   <th style={{ padding: 6 }}>Unit Price</th>
                                   <th style={{ padding: 6 }}>Value</th>
+                                  {canManage && <th style={{ padding: 6 }}>Action</th>}
                                 </tr>
                               </thead>
                               <tbody>
                                 {dayLogs.length === 0 ? (
-                                  <tr><td colSpan={8} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
+                                  <tr><td colSpan={9} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
                                 ) : dayLogs.map(l => {
                                   const loc = locations.find(x => String(x.id) === String(l.locationId));
                                   return (
@@ -235,6 +247,17 @@ export default function Inventory() {
                                       <td style={{ padding: 6, fontWeight: 700 }}>{l.qty}</td>
                                       <td style={{ padding: 6 }}>{fmt(l.unitPrice)}</td>
                                       <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>{fmt(l.totalValue)}</td>
+                                      {canManage && (
+                                        <td style={{ padding: 6 }}>
+                                          <button
+                                            className="btn-ghost small"
+                                            style={{ color: '#dc2626' }}
+                                            onClick={() => handleDeleteLog(l)}
+                                          >
+                                            🗑️
+                                          </button>
+                                        </td>
+                                      )}
                                     </tr>
                                   );
                                 })}
