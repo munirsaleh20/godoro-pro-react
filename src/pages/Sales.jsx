@@ -8,8 +8,8 @@ import AddSaleModal from '../components/AddSaleModal.jsx';
 import EditSaleModal from '../components/EditSaleModal.jsx';
 
 export default function Sales() {
-  const { currentUser, isManager } = useAuth();
-  const { allSalesWithLocations, getSales, totalAllSales, deleteSale, getLocation, getStaffName, dailySalesSummary } = useData();
+  const { currentUser, isManager, isOwner } = useAuth();
+  const { allSalesWithLocations, getSales, deleteSale, getLocation, getStaffName, dailySalesSummary } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
@@ -17,14 +17,23 @@ export default function Sales() {
   const [editSale, setEditSale] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
   const [expandedSalesDate, setExpandedSalesDate] = useState(null);
+  // KIPENGELE: "Date Range Filter" - mauzo yakiwa mengi, chagua tarehe
+  // ya kuanzia mpaka ya kumalizia ili kuona mauzo ya kipindi hicho tu.
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const manager = isManager();
+  const owner = isOwner();
   const myLocationId = currentUser?.locationId;
   const myLocation = myLocationId ? getLocation(myLocationId) : null;
 
   // Manager: sales zote za maeneo yote. Salesperson: sales za duka lake tu.
-  const list = manager ? allSalesWithLocations : getSales(myLocationId);
-  const total = manager ? totalAllSales : list.reduce((sum, s) => sum + s.total, 0);
+  const baseList = manager ? allSalesWithLocations : getSales(myLocationId);
+  const list = (dateFrom || dateTo) ? baseList.filter(s => (
+    (!dateFrom || s.date >= dateFrom) && (!dateTo || s.date <= dateTo)
+  )) : baseList;
+  const total = list.reduce((sum, s) => sum + s.total, 0);
+  const filteringActive = !!(dateFrom || dateTo);
 
   const handleDelete = async (sale) => {
     const ok = await confirmAction(`Delete sale for "${sale.customer}"?\n\nThis cannot be undone!`);
@@ -53,7 +62,8 @@ export default function Sales() {
         <div>
           <h3 className="section-title">🛒 {manager ? 'All Sales' : 'My Shop Sales'}</h3>
           <div style={{ fontSize: 13, color: '#64748b' }}>
-            {manager ? 'All Locations' : myLocation?.name} · Total: <strong>{fmtS(total)}</strong>
+            {manager ? 'All Locations' : myLocation?.name} · {filteringActive ? `Kipindi: ${dateFrom || '…'} → ${dateTo || '…'}` : 'Total'}: <strong>{fmtS(total)}</strong>
+            {filteringActive && <span style={{ marginLeft: 6, color: '#94a3b8' }}>({list.length} sales)</span>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -64,6 +74,23 @@ export default function Sales() {
           )}
           {manager && <button className="btn-primary" onClick={() => setAddOpen(true)}>+ New Sale</button>}
         </div>
+      </div>
+
+      {/* KIPENGELE: "Date Range Filter" - chagua tarehe ya kuanzia mpaka
+          ya kumalizia ili kuona mauzo ya kipindi hicho tu, badala ya
+          kupitia orodha ndefu ya mauzo yote. */}
+      <div className="table-container" style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16, padding: 12 }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label" style={{ fontSize: 12 }}>📅 Kuanzia</label>
+          <input type="date" className="form-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label" style={{ fontSize: 12 }}>📅 Mpaka</label>
+          <input type="date" className="form-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+        {filteringActive && (
+          <button className="btn-ghost" onClick={() => { setDateFrom(''); setDateTo(''); }}>✖️ Futa Kichujio</button>
+        )}
       </div>
 
       {manager && showSummary && (
@@ -85,7 +112,7 @@ export default function Sales() {
                   <th style={{ padding: 8 }}>Paid</th>
                   <th style={{ padding: 8 }}>Debt</th>
                   <th style={{ padding: 8 }}>Total Revenue</th>
-                  <th style={{ padding: 8 }}>Profit</th>
+                  {owner && <th style={{ padding: 8 }}>Profit</th>}
                   <th style={{ padding: 8 }}>Amount Collected</th>
                   <th style={{ padding: 8 }}>Outstanding</th>
                 </tr>
@@ -107,13 +134,13 @@ export default function Sales() {
                         <td style={{ padding: 8, color: '#16a34a' }}>{d.paidCount}</td>
                         <td style={{ padding: 8, color: '#dc2626' }}>{d.debtCount}</td>
                         <td style={{ padding: 8, fontWeight: 700, color: '#0d9488' }}>{fmtS(d.totalRevenue)}</td>
-                        <td style={{ padding: 8, fontWeight: 700, color: d.totalProfit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(d.totalProfit)}</td>
+                        {owner && <td style={{ padding: 8, fontWeight: 700, color: d.totalProfit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(d.totalProfit)}</td>}
                         <td style={{ padding: 8 }}>{fmtS(d.totalPaid)}</td>
                         <td style={{ padding: 8, color: d.totalDebt > 0 ? '#dc2626' : '#64748b' }}>{fmtS(d.totalDebt)}</td>
                       </tr>
                       {isOpen && (
                         <tr>
-                          <td colSpan={9} style={{ padding: 0, background: '#f8fafc' }}>
+                          <td colSpan={owner ? 9 : 8} style={{ padding: 0, background: '#f8fafc' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                               <thead>
                                 <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>
@@ -122,7 +149,7 @@ export default function Sales() {
                                   <th style={{ padding: 6 }}>Location</th>
                                   <th style={{ padding: 6 }}>Items</th>
                                   <th style={{ padding: 6 }}>Total</th>
-                                  <th style={{ padding: 6 }}>Profit</th>
+                                  {owner && <th style={{ padding: 6 }}>Profit</th>}
                                   <th style={{ padding: 6 }}>Paid</th>
                                   <th style={{ padding: 6 }}>Status</th>
                                   <th style={{ padding: 6 }}>Method</th>
@@ -130,7 +157,7 @@ export default function Sales() {
                               </thead>
                               <tbody>
                                 {daySales.length === 0 ? (
-                                  <tr><td colSpan={9} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
+                                  <tr><td colSpan={owner ? 9 : 8} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
                                 ) : daySales.map(s => {
                                   const profit = (s.total || 0) - ((s.unitCost || 0) * (s.quantity || 0));
                                   return (
@@ -145,7 +172,7 @@ export default function Sales() {
                                     <td style={{ padding: 6 }}>{s.locationIcon} {s.locationName}</td>
                                     <td style={{ padding: 6 }}>{s.items}</td>
                                     <td style={{ padding: 6, fontWeight: 700 }}>{fmtS(s.total)}</td>
-                                    <td style={{ padding: 6, fontWeight: 700, color: profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(profit)}</td>
+                                    {owner && <td style={{ padding: 6, fontWeight: 700, color: profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(profit)}</td>}
                                     <td style={{ padding: 6 }}>{fmtS(s.paid)}</td>
                                     <td style={{ padding: 6 }}>
                                       <span className="badge" style={s.status === 'Paid'
@@ -176,8 +203,8 @@ export default function Sales() {
         {list.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">🛒</div>
-            <div className="empty-title">No Sales Recorded</div>
-            <div>Sales will appear here once you start selling</div>
+            <div className="empty-title">{filteringActive ? 'Hakuna Mauzo Kipindi Hicho' : 'No Sales Recorded'}</div>
+            <div>{filteringActive ? 'Jaribu kubadilisha tarehe za kichujio.' : 'Sales will appear here once you start selling'}</div>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -188,8 +215,8 @@ export default function Sales() {
                 <th style={{ padding: 8 }}>Customer</th>
                 <th style={{ padding: 8 }}>Items</th>
                 {manager && <th style={{ padding: 8 }}>Location</th>}
-                {manager && <th style={{ padding: 8 }}>Buying Price</th>}
-                {manager && <th style={{ padding: 8 }}>Profit</th>}
+                {owner && <th style={{ padding: 8 }}>Buying Price</th>}
+                {owner && <th style={{ padding: 8 }}>Profit</th>}
                 <th style={{ padding: 8 }}>Paid</th>
                 <th style={{ padding: 8 }}>Status</th>
                 <th style={{ padding: 8 }}>Method</th>
@@ -207,8 +234,8 @@ export default function Sales() {
                   </td>
                   <td style={{ padding: 8 }}>{s.items}</td>
                   {manager && <td style={{ padding: 8 }}>{s.locationIcon} {s.locationName}</td>}
-                  {manager && <td style={{ padding: 8, fontWeight: 700, color: '#94a3b8' }}>{fmtS((s.unitCost || 0) * (s.quantity || 0))}</td>}
-                  {manager && (
+                  {owner && <td style={{ padding: 8, fontWeight: 700, color: '#94a3b8' }}>{fmtS((s.unitCost || 0) * (s.quantity || 0))}</td>}
+                  {owner && (
                     <td style={{ padding: 8, fontWeight: 700, color: ((s.total || 0) - (s.unitCost || 0) * (s.quantity || 0)) >= 0 ? '#16a34a' : '#dc2626' }}>
                       {fmtS((s.total || 0) - (s.unitCost || 0) * (s.quantity || 0))}
                     </td>

@@ -9,7 +9,7 @@ import ProductFormModal from '../components/ProductFormModal.jsx';
 import BulkAddProductsModal from '../components/BulkAddProductsModal.jsx';
 
 export default function Inventory() {
-  const { isManager, isSalesperson, currentUser } = useAuth();
+  const { isManager, isSalesperson, isOwner, currentUser } = useAuth();
   const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, bulkAddProducts, dailyInventorySummary, inventoryLogs, deleteInventoryLog, updateInventoryLog } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
@@ -28,6 +28,7 @@ export default function Inventory() {
   const [logEditForm, setLogEditForm] = useState({ qty: '', unitPrice: '' });
 
   const canManage = isManager();
+  const owner = isOwner();
   // Salesperson: anaona TU bidhaa za eneo lake (location_id yake), na ni
   // "view-only" - hawezi kuongeza, kuhariri wala kufuta chochote.
   const salesView = isSalesperson();
@@ -380,7 +381,7 @@ export default function Inventory() {
                 <th style={{ padding: 8 }}>Category</th>
                 {canManage && <th style={{ padding: 8 }}>Location</th>}
                 {canManage && <th style={{ padding: 8 }}>Type</th>}
-                {canManage && <th style={{ padding: 8 }}>Buy Price</th>}
+                {owner && <th style={{ padding: 8 }}>Buy Price</th>}
                 <th style={{ padding: 8 }}>Sell Price</th>
                 <th style={{ padding: 8 }}>Stock</th>
                 {canManage && <th style={{ padding: 8 }}>Action</th>}
@@ -406,7 +407,7 @@ export default function Inventory() {
                     <td style={{ padding: 8 }}><span className="badge">{p.cat || 'N/A'}</span></td>
                     {canManage && <td style={{ padding: 8 }}>{p.locationIcon} {p.locationName}</td>}
                     {canManage && <td style={{ padding: 8 }}>{p.locationLabel}</td>}
-                    {canManage && <td style={{ padding: 8 }}>{fmt(p.buy || 0)}</td>}
+                    {owner && <td style={{ padding: 8 }}>{fmt(p.buy || 0)}</td>}
                     <td style={{ padding: 8, color: '#e07b2a', fontWeight: 700 }}>{fmt(p.sell || 0)}</td>
                     <td style={{ padding: 8, color: stockColor, fontWeight: 700 }}>{p.stock || 0}</td>
                     {canManage && (
@@ -421,7 +422,7 @@ export default function Inventory() {
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid #1a1a2e', background: '#f8fafc' }}>
-                <td colSpan={canManage ? (selectMode ? 9 : 8) : 5} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total Stock (shown):</td>
+                <td colSpan={canManage ? (7 + (selectMode ? 1 : 0) + (owner ? 1 : 0)) : 5} style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>Total Stock (shown):</td>
                 <td style={{ padding: 8, fontWeight: 900, color: '#0d9488' }}>{totalListStock} units</td>
                 {canManage && <td></td>}
               </tr>
