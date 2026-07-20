@@ -67,6 +67,9 @@ export default function Inventory() {
       } else {
         showToast(`✅ Product "${payload.name}" added! (${result.addedQty} × ${fmt(payload.sell)} = ${fmt(result.addedValue)})`);
       }
+      if (result.logFailed) {
+        showToast('⚠️ Stock imehifadhiwa, lakini Daily Summary haikuandikwa (tatizo la mtandao) — angalia Inventory moja kwa moja.', 'error');
+      }
     } else {
       await updateProduct(editing.id, payload);
       showToast(`✅ Product "${payload.name}" updated!`);
@@ -77,6 +80,9 @@ export default function Inventory() {
   const handleBulkSubmit = async (locationId, rows) => {
     const summary = await bulkAddProducts(locationId, rows);
     showToast(`✅ ${rows.length} products processed (${summary.newCount} new, ${summary.mergedCount} restocked) — total value ${fmt(summary.totalValue)}`);
+    if (summary.logFailedCount > 0) {
+      showToast(`⚠️ Stock imehifadhiwa, lakini Daily Summary ya bidhaa ${summary.logFailedCount} haikuandikwa (tatizo la mtandao/muunganiko) — jaribu upya baadaye au angalia Inventory moja kwa moja.`, 'error');
+    }
     setBulkModalOpen(false);
   };
 

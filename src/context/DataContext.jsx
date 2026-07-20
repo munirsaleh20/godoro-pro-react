@@ -191,11 +191,16 @@ export function DataProvider({ children }) {
     });
     if (found) return found;
 
-    // 4) Jina linakaribiana tu, bila kujali size
-    return list.find(p => {
-      const pn = norm(p.name);
-      return pn && (pn.includes(nName) || nName.includes(pn));
-    }) || null;
+    // FIX: awali kulikuwa na "Tier 4" hapa iliyopuuza SIZE kabisa (ilitafuta
+    // jina linalokaribiana tu, bila kujali size) - hii ilisababisha bug
+    // kubwa: mfano "Tuff pan (2.5x6x3)" na "Tuff pan (2.5x6x4)" (bidhaa
+    // MBILI TOFAUTI) zilikuwa zikiunganishwa kimakosa kuwa bidhaa MOJA
+    // wakati wa mauzo - stock na bei (buy/sell) zikichukuliwa kutoka
+    // bidhaa isiyo sahihi. Sasa: kama hakuna size sahihi inayolingana,
+    // findMatchingProduct inarudisha "hakuna kilichopatikana" (null) -
+    // AddSaleModal itamlazimu muuzaji kuandika bei kwa mkono (salama
+    // zaidi) badala ya kuchagua bidhaa isiyo sahihi kimyakimya.
+    return null;
   }, [getProducts]);
 
   // Inatumika na addProduct/bulkAddProducts kutafuta kama bidhaa HIYO HIYO
@@ -224,7 +229,16 @@ export function DataProvider({ children }) {
       size: size || null, brand: brand || null, qty, unit_price: unitPrice,
       total_value: totalValue, is_new_product: !!isNewProduct,
     }).select().single();
-    if (error) { console.error('logInventoryAddition error:', error.message); return null; }
+    // FIX: awali makosa hapa yalikuwa yakimezwa kimya kimya (console.error
+    // tu, kisha return null) - kama insert ya log ikishindwa (mfano
+    // muunganiko wa mtandao, au RLS ya muda) kwa MOJA ya bidhaa 2+
+    // zilizoongezwa kwa Bulk Add, bidhaa yenyewe (stock) ilihifadhiwa
+    // sawa, LAKINI Daily Summary "ilipoteza" units za bidhaa hiyo bila
+    // mtu yeyote kujua (mfano: "products 2, units 5" halisi ikaonekana
+    // "products 2, units 3" kwenye Summary). Sasa: kosa linatupwa
+    // (throw) ili addProduct/bulkAddProducts ziweze kumjulisha
+    // mtumiaji badala ya kunyamaza.
+    if (error) { console.error('logInventoryAddition error:', error.message); throw new Error(error.message); }
     const log = {
       id: data.id, locationId: data.location_id, productId: data.product_id,
       name: data.product_name, size: data.size || '', brand: data.brand || '',
@@ -259,10 +273,14 @@ export function DataProvider({ children }) {
       ? { ...p, name, size, brand, buy, sell, stock, cat } : p)));
 
     if (prevProduct && newStock > prevStock) {
-      await logInventoryAddition({
-        locationId: prevProduct.locationId, productId: id, name, size, brand,
-        qty: newStock - prevStock, unitPrice: sell, isNewProduct: false,
-      });
+      try {
+        await logInventoryAddition({
+          locationId: prevProduct.locationId, productId: id, name, size, brand,
+          qty: newStock - prevStock, unitPrice: sell, isNewProduct: false,
+        });
+      } catch (logErr) {
+        console.error('Stock updated but log failed:', logErr.message);
+      }
     }
   }, [products, logInventoryAddition]);
 
@@ -287,11 +305,17 @@ export function DataProvider({ children }) {
       if (error) throw new Error(error.message);
       const merged = { ...existing, buy, sell, cat, stock: newStock };
       setProducts(prev => prev.map(p => (String(p.id) === String(existing.id) ? merged : p)));
-      await logInventoryAddition({
-        locationId, productId: existing.id, name: merged.name, size: merged.size, brand: merged.brand,
-        qty: parseInt(stock, 10) || 0, unitPrice: sell, isNewProduct: false,
-      });
-      return { ...merged, merged: true, addedQty: parseInt(stock, 10) || 0, addedValue: (parseInt(stock, 10) || 0) * (sell || 0) };
+      let logFailed = false;
+      try {
+        await logInventoryAddition({
+          locationId, productId: existing.id, name: merged.name, size: merged.size, brand: merged.brand,
+          qty: parseInt(stock, 10) || 0, unitPrice: sell, isNewProduct: false,
+        });
+      } catch (logErr) {
+        console.error('Restock saved but log failed:', logErr.message);
+        logFailed = true;
+      }
+      return { ...merged, merged: true, addedQty: parseInt(stock, 10) || 0, addedValue: (parseInt(stock, 10) || 0) * (sell || 0), logFailed };
     }
 
     const { data, error } = await sb.from('products').insert({
@@ -305,11 +329,17 @@ export function DataProvider({ children }) {
       sell: data.sell_price || 0, stock: data.stock || 0, cat: data.category || 'Spring',
     };
     setProducts(prev => addUnique(prev, product, false));
-    await logInventoryAddition({
-      locationId, productId: product.id, name: product.name, size: product.size, brand: product.brand,
-      qty: product.stock, unitPrice: product.sell, isNewProduct: true,
-    });
-    return { ...product, merged: false, addedQty: product.stock, addedValue: product.stock * product.sell };
+    let logFailed = false;
+    try {
+      await logInventoryAddition({
+        locationId, productId: product.id, name: product.name, size: product.size, brand: product.brand,
+        qty: product.stock, unitPrice: product.sell, isNewProduct: true,
+      });
+    } catch (logErr) {
+      console.error('Product saved but log failed:', logErr.message);
+      logFailed = true;
+    }
+    return { ...product, merged: false, addedQty: product.stock, addedValue: product.stock * product.sell, logFailed };
   }, [findExactLocationProduct, logInventoryAddition]);
 
   // KIPENGELE: "Bulk Add" - ongeza bidhaa ZAIDI YA MOJA kwa wakati mmoja
@@ -343,7 +373,8 @@ export function DataProvider({ children }) {
     const totalItems = results.reduce((sum, r) => sum + (r.addedQty || 0), 0);
     const totalValue = results.reduce((sum, r) => sum + (r.addedValue || 0), 0);
     const mergedCount = results.filter(r => r.merged).length;
-    return { results, totalItems, totalValue, mergedCount, newCount: results.length - mergedCount };
+    const logFailedCount = results.filter(r => r.logFailed).length;
+    return { results, totalItems, totalValue, mergedCount, newCount: results.length - mergedCount, logFailedCount };
   }, [addProduct]);
 
   // ---------------- Inventory Logs (kwa Muhtasari wa Kila Siku) ----------------

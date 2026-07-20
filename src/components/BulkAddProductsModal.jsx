@@ -26,7 +26,7 @@ const emptyRow = () => ({
 // bidhaa iliyokuwepo tayari badala ya kuunda duplicate.
 export default function BulkAddProductsModal({ open, locationOptions, onClose, onSubmit }) {
   const { isManager } = useAuth();
-  const { knownBrands, getProducts } = useData();
+  const { knownBrands, getProducts, products } = useData();
   const [locationId, setLocationId] = useState('');
   const [rows, setRows] = useState([emptyRow()]);
   // Rows ambazo mtumiaji AMEBADILI bei kwa mkono - kwa hizi hatutabadilisha
@@ -49,9 +49,21 @@ export default function BulkAddProductsModal({ open, locationOptions, onClose, o
   // ipo kwenye duka lililochaguliwa, tunachukua Buy/Sell Price yake ya sasa
   // moja kwa moja, badala ya kumlazimu mtumiaji kuandika bei upya kila mara.
   // Bei bado inabaki EDITABLE - akiibadilisha kwa mkono, hatuigusi tena.
+  //
+  // FIX/BOMA: awali auto-fill ilitafuta DUKA HILI PEKEE - kama bidhaa
+  // haijawahi kuwekwa kwenye DUKA HILI (hata kama ipo kwenye maduka
+  // mengine yote), haikujaza chochote. Sasa: (1) kwanza tafuta DUKA HILI
+  // pekee - bei ya duka hili ina kipaumbele (maduka tofauti yanaweza
+  // kuwa na bei tofauti kimakusudi); (2) kama HAIPO kabisa kwenye duka
+  // hili, tafuta kwenye MADUKA YOTE (bidhaa ile ile popote ilipo) na
+  // tumia bei yake kama pendekezo - bado inabaki editable.
   const findPriceMatch = (name, size, brand) => {
     if (!locationId || !name) return null;
-    return getProducts(locationId).find(p => (
+    const localMatch = getProducts(locationId).find(p => (
+      norm(p.name) === norm(name) && norm(p.size) === norm(size) && norm(p.brand) === norm(brand)
+    ));
+    if (localMatch) return localMatch;
+    return products.find(p => (
       norm(p.name) === norm(name) && norm(p.size) === norm(size) && norm(p.brand) === norm(brand)
     )) || null;
   };

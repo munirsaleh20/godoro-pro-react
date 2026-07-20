@@ -14,14 +14,17 @@ const emptyForm = () => ({
 // mode: 'add' | 'edit'
 export default function ProductFormModal({ open, mode, initial, locationOptions, onClose, onSubmit }) {
   const { isManager } = useAuth();
-  const { knownBrands } = useData();
+  const { knownBrands, getProducts, products } = useData();
   const [form, setForm] = useState(emptyForm());
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
+  // Kama mtumiaji AMEBADILI Buy/Sell kwa mkono, hatutaigusa tena kwa auto-fill.
+  const [priceTouched, setPriceTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setErr('');
+    setPriceTouched(mode === 'edit');
     if (mode === 'edit' && initial) {
       const nameIsKnown = PRODUCT_NAMES.includes(initial.name);
       const sizeIsKnown = PRODUCT_SIZES.includes(initial.size);
@@ -47,6 +50,25 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
   const resolvedName = form.nameSel === OTHER_VALUE ? form.nameOther.trim() : form.nameSel;
   const resolvedSize = form.sizeSel === OTHER_VALUE ? form.sizeOther.trim() : form.sizeSel;
   const resolvedBrand = form.brandSel === OTHER_VALUE ? form.brandOther.trim() : form.brandSel;
+
+  // KIPENGELE: "Auto-fill Price" - sawa na Bulk Add: kama bidhaa hii
+  // (jina+size+brand) tayari ipo DUKA LOLOTE (kwanza duka lililochaguliwa
+  // hapa, kisha duka lingine lolote kama haipo hapa), Buy/Sell Price
+  // zake za sasa zinajazwa moja kwa moja - bado zinabaki EDITABLE.
+  const norm = (s) => (s || '').toString().trim().toLowerCase();
+  useEffect(() => {
+    if (!open || mode !== 'add' || priceTouched || !resolvedName) return;
+    const isMatch = (p) => norm(p.name) === norm(resolvedName) && norm(p.size) === norm(resolvedSize) && norm(p.brand) === norm(resolvedBrand);
+    const match = (form.locationId ? getProducts(form.locationId).find(isMatch) : null) || products.find(isMatch);
+    if (match) {
+      setForm(f => ({
+        ...f,
+        buy: match.buy ? String(match.buy) : f.buy,
+        sell: match.sell ? String(match.sell) : f.sell,
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, resolvedName, resolvedSize, resolvedBrand, form.locationId, priceTouched]);
 
   const handleSave = async () => {
     setErr('');
@@ -125,13 +147,13 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
           <div className="form-group">
             <label className="form-label">Buy Price (TZS)</label>
             <input className="form-input" type="number" placeholder="65000"
-              value={form.buy} onChange={(e) => setForm({ ...form, buy: e.target.value })} />
+              value={form.buy} onChange={(e) => { setPriceTouched(true); setForm({ ...form, buy: e.target.value }); }} />
           </div>
         )}
         <div className="form-group">
           <label className="form-label">Sell Price (TZS) <span className="required">*</span></label>
           <input className="form-input" type="number" placeholder="110000"
-            value={form.sell} onChange={(e) => setForm({ ...form, sell: e.target.value })} />
+            value={form.sell} onChange={(e) => { setPriceTouched(true); setForm({ ...form, sell: e.target.value }); }} />
         </div>
       </div>
 
