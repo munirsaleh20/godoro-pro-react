@@ -10,7 +10,7 @@ import BulkAddProductsModal from '../components/BulkAddProductsModal.jsx';
 
 export default function Inventory() {
   const { isManager, isSalesperson, currentUser } = useAuth();
-  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, bulkAddProducts, dailyInventorySummary, inventoryLogs, deleteInventoryLog } = useData();
+  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, bulkAddProducts, dailyInventorySummary, inventoryLogs, deleteInventoryLog, updateInventoryLog } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
@@ -24,6 +24,8 @@ export default function Inventory() {
   const [editing, setEditing] = useState(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [editingLogId, setEditingLogId] = useState(null);
+  const [logEditForm, setLogEditForm] = useState({ qty: '', unitPrice: '' });
 
   const canManage = isManager();
   // Salesperson: anaona TU bidhaa za eneo lake (location_id yake), na ni
@@ -145,6 +147,28 @@ export default function Inventory() {
     }
   };
 
+  const startEditLog = (log) => {
+    setEditingLogId(log.id);
+    setLogEditForm({ qty: String(log.qty || 0), unitPrice: String(log.unitPrice || 0) });
+  };
+  const cancelEditLog = () => {
+    setEditingLogId(null);
+    setLogEditForm({ qty: '', unitPrice: '' });
+  };
+  const saveEditLog = async (log) => {
+    const qtyNum = parseInt(logEditForm.qty, 10);
+    const priceNum = parseFloat(logEditForm.unitPrice);
+    if (Number.isNaN(qtyNum) || qtyNum < 0) { showToast('Weka Qty sahihi', 'error'); return; }
+    if (Number.isNaN(priceNum) || priceNum < 0) { showToast('Weka Unit Price sahihi', 'error'); return; }
+    try {
+      await updateInventoryLog(log.id, { qty: qtyNum, unitPrice: priceNum });
+      showToast('✅ Log entry updated — stock imesasishwa');
+      cancelEditLog();
+    } catch (err) {
+      showToast('Failed to update: ' + err.message, 'error');
+    }
+  };
+
   return (
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
@@ -237,6 +261,7 @@ export default function Inventory() {
                                   <tr><td colSpan={9} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
                                 ) : dayLogs.map(l => {
                                   const loc = locations.find(x => String(x.id) === String(l.locationId));
+                                  const isEditing = editingLogId === l.id;
                                   return (
                                     <tr key={l.id} style={{ borderTop: '1px solid #e2e8f0' }}>
                                       <td style={{ padding: '6px 8px 6px 28px', fontWeight: 600 }}>{l.name}</td>
@@ -250,18 +275,46 @@ export default function Inventory() {
                                           {l.isNewProduct ? 'New' : 'Restock'}
                                         </span>
                                       </td>
-                                      <td style={{ padding: 6, fontWeight: 700 }}>{l.qty}</td>
-                                      <td style={{ padding: 6 }}>{fmt(l.unitPrice)}</td>
-                                      <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>{fmt(l.totalValue)}</td>
+                                      {isEditing ? (
+                                        <>
+                                          <td style={{ padding: 6 }}>
+                                            <input
+                                              type="number" className="form-input" style={{ width: 70, padding: 4 }}
+                                              value={logEditForm.qty}
+                                              onChange={(e) => setLogEditForm(f => ({ ...f, qty: e.target.value }))}
+                                            />
+                                          </td>
+                                          <td style={{ padding: 6 }}>
+                                            <input
+                                              type="number" className="form-input" style={{ width: 90, padding: 4 }}
+                                              value={logEditForm.unitPrice}
+                                              onChange={(e) => setLogEditForm(f => ({ ...f, unitPrice: e.target.value }))}
+                                            />
+                                          </td>
+                                          <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>
+                                            {fmt((parseInt(logEditForm.qty, 10) || 0) * (parseFloat(logEditForm.unitPrice) || 0))}
+                                          </td>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <td style={{ padding: 6, fontWeight: 700 }}>{l.qty}</td>
+                                          <td style={{ padding: 6 }}>{fmt(l.unitPrice)}</td>
+                                          <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>{fmt(l.totalValue)}</td>
+                                        </>
+                                      )}
                                       {canManage && (
-                                        <td style={{ padding: 6 }}>
-                                          <button
-                                            className="btn-ghost small"
-                                            style={{ color: '#dc2626' }}
-                                            onClick={() => handleDeleteLog(l)}
-                                          >
-                                            🗑️
-                                          </button>
+                                        <td style={{ padding: 6, whiteSpace: 'nowrap' }}>
+                                          {isEditing ? (
+                                            <>
+                                              <button className="btn-ghost small" style={{ color: '#16a34a' }} onClick={() => saveEditLog(l)}>💾</button>
+                                              <button className="btn-ghost small" onClick={cancelEditLog}>✖️</button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => startEditLog(l)}>✏️</button>
+                                              <button className="btn-ghost small" style={{ color: '#dc2626', marginLeft: 4 }} onClick={() => handleDeleteLog(l)}>🗑️</button>
+                                            </>
+                                          )}
                                         </td>
                                       )}
                                     </tr>

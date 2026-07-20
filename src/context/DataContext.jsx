@@ -426,6 +426,43 @@ export function DataProvider({ children }) {
     }
   }, [inventoryLogs, products]);
 
+  // KIPENGELE: "Edit" rekodi ya inventory_logs (badilisha Qty au Unit
+  // Price ya bidhaa iliyoongezwa siku fulani) - kutoka kwenye Daily
+  // Summary. Kama Qty imebadilika, tunasasisha stock ya bidhaa husika
+  // kwa TOFAUTI (delta = newQty - oldQty) - sio kubadilisha stock nzima
+  // moja kwa moja, ili tusiathiri mauzo/marekebisho mengine yaliyotokea
+  // baada ya log hii kuandikwa. Stock haiwezi kwenda chini ya 0.
+  const updateInventoryLog = useCallback(async (id, { qty, unitPrice }) => {
+    const log = inventoryLogs.find(l => String(l.id) === String(id));
+    if (!log) throw new Error('Log entry haikupatikana.');
+
+    const newQty = parseInt(qty, 10) || 0;
+    const newUnitPrice = parseFloat(unitPrice) || 0;
+    const newTotalValue = newQty * newUnitPrice;
+
+    const { data: updatedRows, error } = await sb.from('inventory_logs').update({
+      qty: newQty, unit_price: newUnitPrice, total_value: newTotalValue,
+    }).eq('id', id).select();
+    if (error) throw new Error(error.message);
+    if (!updatedRows || updatedRows.length === 0) {
+      throw new Error('Huna ruhusa ya ku-edit rekodi hii. Owner na Manager tu ndio wanaruhusiwa.');
+    }
+
+    setInventoryLogs(prev => prev.map(l => (String(l.id) === String(id)
+      ? { ...l, qty: newQty, unitPrice: newUnitPrice, totalValue: newTotalValue } : l)));
+
+    const qtyDelta = newQty - (log.qty || 0);
+    if (qtyDelta !== 0 && log.productId) {
+      const product = products.find(p => String(p.id) === String(log.productId));
+      if (product) {
+        const newStock = Math.max((product.stock || 0) + qtyDelta, 0);
+        const { error: stockError } = await sb.from('products').update({ stock: newStock }).eq('id', product.id);
+        if (stockError) console.error('Failed to adjust stock after log edit:', stockError);
+        else setProducts(prev => prev.map(p => (String(p.id) === String(product.id) ? { ...p, stock: newStock } : p)));
+      }
+    }
+  }, [inventoryLogs, products]);
+
   // Muhtasari wa bidhaa zilizoongezwa kwa SIKU (grouped by date) - kwa kila
   // siku: idadi ya matukio, jumla ya units (qty) zilizoongezwa, na jumla ya
   // thamani (qty x bei) - AUTOMATIC, bila kukokotoa kwa mkono.
@@ -1916,7 +1953,7 @@ export function DataProvider({ children }) {
     loadLocations, addLocation, updateLocation, deleteLocation, getLocation,
     products, productsLoading, allProductsWithLocations, getProducts, knownBrands,
     loadProducts, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, findMatchingProduct, bulkAddProducts,
-    inventoryLogs, inventoryLogsLoading, loadInventoryLogs, dailyInventorySummary, deleteInventoryLog,
+    inventoryLogs, inventoryLogsLoading, loadInventoryLogs, dailyInventorySummary, deleteInventoryLog, updateInventoryLog,
     sales, salesLoading, allSalesWithLocations, getSales, totalAllSales, dailySalesSummary,
     loadSales, addSale, updateSale, deleteSale,
     debts, debtsLoading, allDebtsWithLocations, getDebts, totalAllDebts,
