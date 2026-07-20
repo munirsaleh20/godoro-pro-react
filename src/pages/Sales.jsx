@@ -80,6 +80,7 @@ export default function Sales() {
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
                   <th style={{ padding: 8 }}>Date</th>
+                  <th style={{ padding: 8 }}>Store</th>
                   <th style={{ padding: 8 }}>Sales</th>
                   <th style={{ padding: 8 }}>Paid</th>
                   <th style={{ padding: 8 }}>Debt</th>
@@ -91,15 +92,17 @@ export default function Sales() {
               </thead>
               <tbody>
                 {dailySalesSummary.map(d => {
-                  const isOpen = expandedSalesDate === d.date;
-                  const daySales = isOpen ? allSalesWithLocations.filter(s => s.date === d.date) : [];
+                  const rowKey = `${d.date}|${d.locationId}`;
+                  const isOpen = expandedSalesDate === rowKey;
+                  const daySales = isOpen ? allSalesWithLocations.filter(s => s.date === d.date && String(s.locationId) === String(d.locationId)) : [];
                   return (
-                    <Fragment key={d.date}>
+                    <Fragment key={rowKey}>
                       <tr
                         style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
-                        onClick={() => setExpandedSalesDate(isOpen ? null : d.date)}
+                        onClick={() => setExpandedSalesDate(isOpen ? null : rowKey)}
                       >
                         <td style={{ padding: 8 }}>{isOpen ? '▾' : '▸'} {d.date}</td>
+                        <td style={{ padding: 8 }}>{d.locationIcon} {d.locationName}</td>
                         <td style={{ padding: 8, fontWeight: 700 }}>{d.count}</td>
                         <td style={{ padding: 8, color: '#16a34a' }}>{d.paidCount}</td>
                         <td style={{ padding: 8, color: '#dc2626' }}>{d.debtCount}</td>
@@ -110,7 +113,7 @@ export default function Sales() {
                       </tr>
                       {isOpen && (
                         <tr>
-                          <td colSpan={8} style={{ padding: 0, background: '#f8fafc' }}>
+                          <td colSpan={9} style={{ padding: 0, background: '#f8fafc' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                               <thead>
                                 <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>

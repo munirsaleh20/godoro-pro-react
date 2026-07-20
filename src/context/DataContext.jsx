@@ -466,18 +466,29 @@ export function DataProvider({ children }) {
   // Muhtasari wa bidhaa zilizoongezwa kwa SIKU (grouped by date) - kwa kila
   // siku: idadi ya matukio, jumla ya units (qty) zilizoongezwa, na jumla ya
   // thamani (qty x bei) - AUTOMATIC, bila kukokotoa kwa mkono.
+  // Muhtasari wa bidhaa zilizoongezwa kwa SIKU, kwa kila DUKA (grouped by
+  // date + location) - kila mstari ni duka MMOJA mahususi kwa siku moja,
+  // ili ionekane wazi ni duka gani bidhaa ziliongezwa.
   const dailyInventorySummary = useMemo(() => {
     const map = {};
     inventoryLogs.forEach(l => {
       if (!l.date) return;
-      map[l.date] = map[l.date] || { date: l.date, entries: 0, totalUnits: 0, totalValue: 0, newProducts: 0, restocks: 0 };
-      map[l.date].entries += 1;
-      map[l.date].totalUnits += l.qty || 0;
-      map[l.date].totalValue += l.totalValue || 0;
-      if (l.isNewProduct) map[l.date].newProducts += 1; else map[l.date].restocks += 1;
+      const key = `${l.date}|${l.locationId}`;
+      if (!map[key]) {
+        const loc = getLocation(l.locationId);
+        map[key] = {
+          date: l.date, locationId: l.locationId,
+          locationName: loc ? loc.name : 'Unknown', locationIcon: loc ? (loc.type === 'store' ? '🏪' : '🏬') : '❓',
+          entries: 0, totalUnits: 0, totalValue: 0, newProducts: 0, restocks: 0,
+        };
+      }
+      map[key].entries += 1;
+      map[key].totalUnits += l.qty || 0;
+      map[key].totalValue += l.totalValue || 0;
+      if (l.isNewProduct) map[key].newProducts += 1; else map[key].restocks += 1;
     });
-    return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [inventoryLogs]);
+    return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : (a.date > b.date ? -1 : a.locationName.localeCompare(b.locationName))));
+  }, [inventoryLogs, getLocation]);
 
   // ---------------- Debts ----------------
   // NOTE: Kwenye HTML ya awali, jedwali la 'debts' lilikuwa linasomwa tu
@@ -829,18 +840,28 @@ export function DataProvider({ children }) {
   // na dailyInventorySummary, lakini kwa upande wa Sales: kwa kila siku
   // tunaonyesha idadi ya mauzo, jumla ya mapato (revenue), kiasi
   // kilicholipwa, deni lililobaki, na mgawanyo wa Cash/Lipa Namba/Bank/Debt.
+  // KIPENGELE: "Muhtasari wa Mauzo kwa Siku" (Daily Sales Summary) - sawa
+  // na dailyInventorySummary, lakini kwa upande wa Sales: kwa kila DUKA
+  // (grouped by date + location) tunaonyesha idadi ya mauzo, jumla ya
+  // mapato (revenue), kiasi kilicholipwa, deni lililobaki, na profit.
   const dailySalesSummary = useMemo(() => {
     const map = {};
     sales.forEach(s => {
       const date = s.date || (s.createdAt || '').split('T')[0];
       if (!date) return;
-      map[date] = map[date] || {
-        date, count: 0, totalRevenue: 0, totalPaid: 0, totalDebt: 0, totalProfit: 0, paidCount: 0, debtCount: 0,
-      };
-      map[date].count += 1;
-      map[date].totalRevenue += s.total || 0;
-      map[date].totalPaid += s.paid || 0;
-      map[date].totalDebt += Math.max((s.total || 0) - (s.paid || 0), 0);
+      const key = `${date}|${s.locationId}`;
+      if (!map[key]) {
+        const loc = getLocation(s.locationId);
+        map[key] = {
+          date, locationId: s.locationId,
+          locationName: loc ? loc.name : 'Unknown', locationIcon: loc ? (loc.type === 'store' ? '🏪' : '🏬') : '❓',
+          count: 0, totalRevenue: 0, totalPaid: 0, totalDebt: 0, totalProfit: 0, paidCount: 0, debtCount: 0,
+        };
+      }
+      map[key].count += 1;
+      map[key].totalRevenue += s.total || 0;
+      map[key].totalPaid += s.paid || 0;
+      map[key].totalDebt += Math.max((s.total || 0) - (s.paid || 0), 0);
       // FIX: awali profit ilikokotolewa kwa (unitPrice - unitCost) x qty -
       // bei ya MWANZO ya mauzo. Lakini "Edit Sale" inaruhusu Manager
       // kubadilisha TOTAL peke yake (mfano punguzo la bei kwa mteja/
@@ -851,11 +872,11 @@ export function DataProvider({ children }) {
       // punguzo lolote) MINUS gharama ya ununuzi (unitCost x quantity) -
       // hii inaendana na Total na Buying Price zinazoonekana kwenye
       // jedwali, badala ya thamani ya ndani isiyoonekana popote.
-      map[date].totalProfit += (s.total || 0) - ((s.unitCost || 0) * (s.quantity || 0));
-      if (s.status === 'Paid') map[date].paidCount += 1; else map[date].debtCount += 1;
+      map[key].totalProfit += (s.total || 0) - ((s.unitCost || 0) * (s.quantity || 0));
+      if (s.status === 'Paid') map[key].paidCount += 1; else map[key].debtCount += 1;
     });
-    return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [sales]);
+    return Object.values(map).sort((a, b) => (a.date < b.date ? 1 : (a.date > b.date ? -1 : a.locationName.localeCompare(b.locationName))));
+  }, [sales, getLocation]);
 
   // ---------------- Staff ----------------
   const loadStaff = useCallback(async () => {
