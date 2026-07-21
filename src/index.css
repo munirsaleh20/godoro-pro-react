@@ -11,6 +11,9 @@ button, input, select { font-family: inherit; }
 
 /* Layout */
 .app-shell { display: flex; min-height: 100vh; }
+/* KIPENGELE: Menu (sidebar) isitoweke juu ukurasa ukiwa mrefu na
+   unascroll chini - "sticky" inaifanya ibaki inayoonekana daima
+   (usawa wa sehemu unayoiona), badala ya kuondoka nje ya screen. */
 .sidebar {
   width: 240px;
   background: #1a1a2e;
@@ -19,6 +22,11 @@ button, input, select { font-family: inherit; }
   flex-direction: column;
   padding: 20px 0;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
 }
 .sidebar-top { display: flex; align-items: center; justify-content: space-between; padding: 0 20px 20px; }
 .sidebar-brand { font-size: 20px; font-weight: 800; }
