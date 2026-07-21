@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import { fmtS } from '../utils/format.js';
 import AddSaleModal from '../components/AddSaleModal.jsx';
+import BulkSaleModal from '../components/BulkSaleModal.jsx';
 import EditSaleModal from '../components/EditSaleModal.jsx';
 
 export default function Sales() {
@@ -14,6 +15,7 @@ export default function Sales() {
   const confirmAction = useConfirm();
 
   const [addOpen, setAddOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [editSale, setEditSale] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
   const [expandedSalesDate, setExpandedSalesDate] = useState(null);
@@ -83,6 +85,7 @@ export default function Sales() {
             </button>
           )}
           {manager && <button className="btn-primary" onClick={() => setAddOpen(true)}>+ New Sale</button>}
+          {manager && <button className="btn-primary" style={{ background: '#0d9488' }} onClick={() => setBulkOpen(true)}>📦 Bulk Sale</button>}
         </div>
       </div>
 
@@ -285,6 +288,13 @@ export default function Sales() {
           open={addOpen}
           lockedLocationId={null}
           onClose={() => setAddOpen(false)}
+        />
+      )}
+      {manager && (
+        <BulkSaleModal
+          open={bulkOpen}
+          lockedLocationId={null}
+          onClose={() => setBulkOpen(false)}
         />
       )}
       <EditSaleModal
