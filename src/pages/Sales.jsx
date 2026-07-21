@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -21,6 +21,7 @@ export default function Sales() {
   // ya kuanzia mpaka ya kumalizia ili kuona mauzo ya kipindi hicho tu.
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [page, setPage] = useState(1);
 
   const manager = isManager();
   const owner = isOwner();
@@ -34,6 +35,15 @@ export default function Sales() {
   )) : baseList;
   const total = list.reduce((sum, s) => sum + s.total, 0);
   const filteringActive = !!(dateFrom || dateTo);
+
+  useEffect(() => { setPage(1); }, [dateFrom, dateTo]);
+
+  // KIPENGELE: "Pagination" - mauzo yakiwa mengi, onyesha 50 kwa wakati
+  // mmoja pekee, na buttons za Next/Previous kuvinjari yaliyobaki.
+  const PAGE_SIZE = 50;
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedList = list.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const handleDelete = async (sale) => {
     const ok = await confirmAction(`Delete sale for "${sale.customer}"?\n\nThis cannot be undone!`);
@@ -224,7 +234,7 @@ export default function Sales() {
               </tr>
             </thead>
             <tbody>
-              {list.map(s => (
+              {pagedList.map(s => (
                 <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: 8 }}>{s.date}</td>
                   {manager && <td style={{ padding: 8, fontSize: 12 }}>👤 {getStaffName(s.staffId)}</td>}
@@ -261,6 +271,14 @@ export default function Sales() {
           </table>
         )}
       </div>
+
+      {list.length > PAGE_SIZE && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, margin: '14px 0' }}>
+          <button className="btn-ghost" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>⬅️ Previous</button>
+          <span style={{ fontSize: 13, color: '#64748b' }}>Page {safePage} of {totalPages} ({list.length} sales)</span>
+          <button className="btn-ghost" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next ➡️</button>
+        </div>
+      )}
 
       {manager && (
         <AddSaleModal

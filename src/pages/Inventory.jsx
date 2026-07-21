@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -26,6 +26,9 @@ export default function Inventory() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [editingLogId, setEditingLogId] = useState(null);
   const [logEditForm, setLogEditForm] = useState({ qty: '', unitPrice: '' });
+  const [page, setPage] = useState(1);
+
+  useEffect(() => { setPage(1); }, [filter, search]);
 
   const canManage = isManager();
   const owner = isOwner();
@@ -54,6 +57,14 @@ export default function Inventory() {
   if (search.trim()) {
     list = list.filter(p => matchesSearch([p.name, p.size, p.brand, p.cat, p.sell, p.buy], search));
   }
+
+  // KIPENGELE: "Pagination" - bidhaa zikiwa nyingi, onyesha 50 kwa wakati
+  // mmoja pekee, na buttons za Next/Previous kuvinjari zilizobaki -
+  // badala ya kuorodhesha zote kwenye page moja ndefu.
+  const PAGE_SIZE = 50;
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedList = list.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const baseCount = salesView ? allProductsWithLocations.filter(p => String(p.locationId) === String(currentUser?.locationId)) : allProductsWithLocations;
   const totalStock = baseCount.reduce((sum, p) => sum + p.stock, 0);
@@ -113,12 +124,16 @@ export default function Inventory() {
       return next;
     });
   };
-  const allVisibleSelected = list.length > 0 && list.every(p => selectedIds.has(String(p.id)));
+  const allVisibleSelected = pagedList.length > 0 && pagedList.every(p => selectedIds.has(String(p.id)));
   const toggleSelectAll = () => {
     setSelectedIds(prev => {
-      if (allVisibleSelected) return new Set();
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        pagedList.forEach(p => next.delete(String(p.id)));
+        return next;
+      }
       const next = new Set(prev);
-      list.forEach(p => next.add(String(p.id)));
+      pagedList.forEach(p => next.add(String(p.id)));
       return next;
     });
   };
@@ -388,7 +403,7 @@ export default function Inventory() {
               </tr>
             </thead>
             <tbody>
-              {list.map(p => {
+              {pagedList.map(p => {
                 const stockColor = p.stock < 5 ? '#dc2626' : p.stock < 10 ? '#e07b2a' : '#16a34a';
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -430,6 +445,14 @@ export default function Inventory() {
           </table>
         )}
       </div>
+
+      {list.length > PAGE_SIZE && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, margin: '14px 0' }}>
+          <button className="btn-ghost" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>⬅️ Previous</button>
+          <span style={{ fontSize: 13, color: '#64748b' }}>Page {safePage} of {totalPages} ({list.length} products)</span>
+          <button className="btn-ghost" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next ➡️</button>
+        </div>
+      )}
 
       {canManage && (
         <ProductFormModal

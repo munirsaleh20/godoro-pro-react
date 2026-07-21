@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
 import { PRODUCT_NAMES, PRODUCT_SIZES, PRODUCT_CATEGORIES, OTHER_VALUE } from '../utils/productConstants.js';
+import SearchableSelect from './SearchableSelect.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useData } from '../context/DataContext.jsx';
 import { fmt } from '../utils/format.js';
@@ -188,11 +189,14 @@ export default function BulkAddProductsModal({ open, locationOptions, onClose, o
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Product Name <span className="required">*</span></label>
-                  <select className="form-select" value={r.nameSel} onChange={(e) => updateRow(idx, { nameSel: e.target.value })}>
-                    <option value="">-- Select --</option>
-                    {PRODUCT_NAMES.map(n => <option key={n} value={n}>{n}</option>)}
-                    <option value={OTHER_VALUE}>Other (Type manually)</option>
-                  </select>
+                  <SearchableSelect
+                    options={PRODUCT_NAMES}
+                    value={r.nameSel}
+                    onChange={(v) => updateRow(idx, { nameSel: v })}
+                    placeholder="-- Select --"
+                    otherLabel="Other (Type manually)"
+                    otherValue={OTHER_VALUE}
+                  />
                   {r.nameSel === OTHER_VALUE && (
                     <input className="form-input" style={{ marginTop: 8 }} placeholder="Type product name..."
                       value={r.nameOther} onChange={(e) => updateRow(idx, { nameOther: e.target.value })} />
@@ -200,11 +204,14 @@ export default function BulkAddProductsModal({ open, locationOptions, onClose, o
                 </div>
                 <div className="form-group">
                   <label className="form-label">Size</label>
-                  <select className="form-select" value={r.sizeSel} onChange={(e) => updateRow(idx, { sizeSel: e.target.value })}>
-                    <option value="">-- Select --</option>
-                    {PRODUCT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                    <option value={OTHER_VALUE}>Other (Type manually)</option>
-                  </select>
+                  <SearchableSelect
+                    options={PRODUCT_SIZES}
+                    value={r.sizeSel}
+                    onChange={(v) => updateRow(idx, { sizeSel: v })}
+                    placeholder="-- Select --"
+                    otherLabel="Other (Type manually)"
+                    otherValue={OTHER_VALUE}
+                  />
                   {r.sizeSel === OTHER_VALUE && (
                     <input className="form-input" style={{ marginTop: 8 }} placeholder="Type size..."
                       value={r.sizeOther} onChange={(e) => updateRow(idx, { sizeOther: e.target.value })} />
@@ -215,11 +222,14 @@ export default function BulkAddProductsModal({ open, locationOptions, onClose, o
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Brand</label>
-                  <select className="form-select" value={r.brandSel} onChange={(e) => updateRow(idx, { brandSel: e.target.value })}>
-                    <option value="">-- Select --</option>
-                    {knownBrands.map(b => <option key={b} value={b}>{b}</option>)}
-                    <option value={OTHER_VALUE}>Other (Type manually)</option>
-                  </select>
+                  <SearchableSelect
+                    options={knownBrands}
+                    value={r.brandSel}
+                    onChange={(v) => updateRow(idx, { brandSel: v })}
+                    placeholder="-- Select --"
+                    otherLabel="Other (Type manually)"
+                    otherValue={OTHER_VALUE}
+                  />
                   {r.brandSel === OTHER_VALUE && (
                     <input className="form-input" style={{ marginTop: 8 }} placeholder="Type brand..."
                       value={r.brandOther} onChange={(e) => updateRow(idx, { brandOther: e.target.value })} />

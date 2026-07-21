@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
+import SearchableSelect from './SearchableSelect.jsx';
 import { PRODUCT_NAMES, PRODUCT_SIZES, PRODUCT_CATEGORIES, OTHER_VALUE } from '../utils/productConstants.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useData } from '../context/DataContext.jsx';
@@ -104,11 +105,14 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
 
       <div className="form-group">
         <label className="form-label">Product Name <span className="required">*</span></label>
-        <select className="form-select" value={form.nameSel} onChange={(e) => setForm({ ...form, nameSel: e.target.value })}>
-          <option value="">-- Select Product --</option>
-          {PRODUCT_NAMES.map(n => <option key={n} value={n}>{n}</option>)}
-          <option value={OTHER_VALUE}>Other (Type manually)</option>
-        </select>
+        <SearchableSelect
+          options={PRODUCT_NAMES}
+          value={form.nameSel}
+          onChange={(v) => setForm({ ...form, nameSel: v })}
+          placeholder="-- Select Product --"
+          otherLabel="Other (Type manually)"
+          otherValue={OTHER_VALUE}
+        />
         {form.nameSel === OTHER_VALUE && (
           <input className="form-input" style={{ marginTop: 8 }} placeholder="Type product name..."
             value={form.nameOther} onChange={(e) => setForm({ ...form, nameOther: e.target.value })} />
@@ -118,11 +122,14 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
       <div className="form-row">
         <div className="form-group">
           <label className="form-label">Size</label>
-          <select className="form-select" value={form.sizeSel} onChange={(e) => setForm({ ...form, sizeSel: e.target.value })}>
-            <option value="">-- Select Size --</option>
-            {PRODUCT_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-            <option value={OTHER_VALUE}>Other (Type manually)</option>
-          </select>
+          <SearchableSelect
+            options={PRODUCT_SIZES}
+            value={form.sizeSel}
+            onChange={(v) => setForm({ ...form, sizeSel: v })}
+            placeholder="-- Select Size --"
+            otherLabel="Other (Type manually)"
+            otherValue={OTHER_VALUE}
+          />
           {form.sizeSel === OTHER_VALUE && (
             <input className="form-input" style={{ marginTop: 8 }} placeholder="Type size..."
               value={form.sizeOther} onChange={(e) => setForm({ ...form, sizeOther: e.target.value })} />
@@ -130,11 +137,14 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
         </div>
         <div className="form-group">
           <label className="form-label">Brand</label>
-          <select className="form-select" value={form.brandSel} onChange={(e) => setForm({ ...form, brandSel: e.target.value })}>
-            <option value="">-- Select Brand --</option>
-            {knownBrands.map(b => <option key={b} value={b}>{b}</option>)}
-            <option value={OTHER_VALUE}>Other (Type manually)</option>
-          </select>
+          <SearchableSelect
+            options={knownBrands}
+            value={form.brandSel}
+            onChange={(v) => setForm({ ...form, brandSel: v })}
+            placeholder="-- Select Brand --"
+            otherLabel="Other (Type manually)"
+            otherValue={OTHER_VALUE}
+          />
           {form.brandSel === OTHER_VALUE && (
             <input className="form-input" style={{ marginTop: 8 }} placeholder="Type brand..."
               value={form.brandOther} onChange={(e) => setForm({ ...form, brandOther: e.target.value })} />
