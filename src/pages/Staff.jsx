@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import StaffFormModal from '../components/StaffFormModal.jsx';
+import ChangePasswordModal from '../components/ChangePasswordModal.jsx';
 
 export default function Staff() {
   const { currentUser, isManager } = useAuth();
@@ -14,6 +15,7 @@ export default function Staff() {
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState('add');
   const [editing, setEditing] = useState(null);
+  const [pwdModalOpen, setPwdModalOpen] = useState(false);
 
   if (!isManager()) {
     return (
@@ -82,6 +84,11 @@ export default function Staff() {
                 <button className="btn-ghost small" style={{ color: '#dc2626' }} onClick={() => handleDelete(s)}>🗑️ Remove</button>
               </div>
             )}
+            {s.id === currentUser.id && (
+              <div className="card-actions">
+                <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => setPwdModalOpen(true)}>🔑 Badilisha Password Yangu</button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -92,6 +99,11 @@ export default function Staff() {
         initial={editing}
         onClose={() => setModalOpen(false)}
         onSubmit={handleSubmit}
+      />
+
+      <ChangePasswordModal
+        open={pwdModalOpen}
+        onClose={() => setPwdModalOpen(false)}
       />
     </div>
   );

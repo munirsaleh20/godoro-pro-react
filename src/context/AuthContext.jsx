@@ -121,6 +121,29 @@ export function AuthProvider({ children }) {
     setCurrentUser(null);
   }, []);
 
+  // Inaruhusu mtumiaji yeyote aliye-login (owner, manager, salesperson)
+  // kubadilisha password yake mwenyewe ndani ya site. Tunahitaji password
+  // ya sasa kwanza ili kuthibitisha ni yeye kweli (re-authentication)
+  // kabla ya kuruhusu mabadiliko - hii inazuia mtu akikuta kifaa wazi
+  // asiweze kubadilisha password bila kujua ya zamani.
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    if (!currentUser?.email) {
+      throw new Error('No logged-in user found.');
+    }
+    const { error: reauthError } = await sb.auth.signInWithPassword({
+      email: currentUser.email,
+      password: currentPassword,
+    });
+    if (reauthError) {
+      throw new Error('Current password is incorrect.');
+    }
+    const { error: updateError } = await sb.auth.updateUser({ password: newPassword });
+    if (updateError) {
+      throw new Error(updateError.message || 'Failed to update password.');
+    }
+    return true;
+  }, [currentUser]);
+
   const isOwner = () => currentUser?.role === 'owner';
   const isManager = () => currentUser?.role === 'owner' || currentUser?.role === 'manager';
   const isSalesperson = () => currentUser?.role === 'salesperson';
@@ -133,6 +156,7 @@ export function AuthProvider({ children }) {
     login,
     signupOwner,
     logout,
+    changePassword,
     isOwner,
     isManager,
     isSalesperson,
