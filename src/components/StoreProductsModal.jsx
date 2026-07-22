@@ -15,13 +15,20 @@ export default function StoreProductsModal({ open, location, products, onClose }
   const totalStock = list.reduce((sum, p) => sum + (p.stock || 0), 0);
 
   const handlePrint = () => {
-    const rows = list.map(p => `
+    // KIPENGELE: Kuprint - ondoa Buy Price (ni siri ya biashara, isionekane
+    // kwenye karatasi inayoweza kuonekana na mteja) na ondoa bidhaa zenye
+    // stock 0 (hazina maana kuonyeshwa kwenye ripoti ya nini kipo dukani).
+    // Hii ni kwenye PRINT TU - modal, CSV export, na ukurasa wa Inventory
+    // havibadiliki, bado vinaonyesha Buy Price na bidhaa za stock 0.
+    const printList = list.filter(p => (p.stock || 0) > 0);
+    const printTotalStock = printList.reduce((sum, p) => sum + (p.stock || 0), 0);
+
+    const rows = printList.map(p => `
       <tr>
         <td>${escapeHtml(p.name)}</td>
         <td>${escapeHtml(p.size || '-')}</td>
         <td>${escapeHtml(p.brand || '-')}</td>
         <td>${escapeHtml(p.cat || '-')}</td>
-        ${isManager() ? `<td>${fmt(p.buy || 0)}</td>` : ''}
         <td>${fmt(p.sell || 0)}</td>
         <td>${p.stock || 0}</td>
       </tr>
@@ -48,15 +55,14 @@ export default function StoreProductsModal({ open, location, products, onClose }
             <thead>
               <tr>
                 <th>Product</th><th>Size</th><th>Brand</th><th>Category</th>
-                ${isManager() ? '<th>Buy Price</th>' : ''}
                 <th>Sell Price</th><th>Stock</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
             <tfoot>
               <tr>
-                <td colspan="${isManager() ? 6 : 5}" style="text-align:right;">Total Stock:</td>
-                <td>${totalStock}</td>
+                <td colspan="5" style="text-align:right;">Total Stock:</td>
+                <td>${printTotalStock}</td>
               </tr>
             </tfoot>
           </table>
