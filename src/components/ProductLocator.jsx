@@ -11,6 +11,7 @@ export default function ProductLocator() {
   const results = s
     ? allProductsWithLocations
         .filter(p => matchesSearch([p.name, p.size, p.brand], s))
+        .filter(p => p.stock > 0)
         .sort((a, b) => b.stock - a.stock)
     : [];
 
