@@ -10,7 +10,7 @@ import BulkAddProductsModal from '../components/BulkAddProductsModal.jsx';
 
 export default function Inventory() {
   const { isManager, isSalesperson, isOwner, currentUser } = useAuth();
-  const { allProductsWithLocations, locations, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, bulkAddProducts, dailyInventorySummary, inventoryLogs, deleteInventoryLog, updateInventoryLog } = useData();
+  const { allProductsWithLocations, locations, addProduct, updateProduct, updateProductEverywhere, deleteProduct, bulkDeleteProducts, bulkAddProducts, dailyInventorySummary, inventoryLogs, deleteInventoryLog, updateInventoryLog } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
@@ -85,8 +85,13 @@ export default function Inventory() {
         showToast('⚠️ Stock imehifadhiwa, lakini Daily Summary haikuandikwa (tatizo la mtandao) — angalia Inventory moja kwa moja.', 'error');
       }
     } else {
-      await updateProduct(editing.id, payload);
-      showToast(`✅ Product "${payload.name}" updated!`);
+      const { applyPriceToAll, ...productPayload } = payload;
+      const syncedCount = await updateProductEverywhere(editing.id, productPayload, applyPriceToAll);
+      if (applyPriceToAll && syncedCount > 0) {
+        showToast(`✅ Product "${productPayload.name}" updated! Bei imesasishwa kwenye maduka mengine ${syncedCount} pia.`);
+      } else {
+        showToast(`✅ Product "${productPayload.name}" updated!`);
+      }
     }
     setModalOpen(false);
   };

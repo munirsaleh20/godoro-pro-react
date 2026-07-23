@@ -10,7 +10,7 @@ import EditSaleModal from '../components/EditSaleModal.jsx';
 
 export default function Sales() {
   const { currentUser, isManager, isOwner } = useAuth();
-  const { allSalesWithLocations, getSales, deleteSale, getLocation, getStaffName, dailySalesSummary } = useData();
+  const { allSalesWithLocations, getSales, deleteSale, getLocation, getStaffName, dailySalesSummary, locations } = useData();
   const { showToast } = useToast();
   const confirmAction = useConfirm();
 
@@ -23,6 +23,10 @@ export default function Sales() {
   // ya kuanzia mpaka ya kumalizia ili kuona mauzo ya kipindi hicho tu.
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // KIPENGELE: "Location Filter" - chagua duka/store maalum kuona mauzo
+  // yake tu (manager/owner pekee, kwa sababu salesperson tayari anaona
+  // duka lake pekee kila mara).
+  const [locationFilter, setLocationFilter] = useState('all');
   const [page, setPage] = useState(1);
 
   const manager = isManager();
@@ -32,13 +36,15 @@ export default function Sales() {
 
   // Manager: sales zote za maeneo yote. Salesperson: sales za duka lake tu.
   const baseList = manager ? allSalesWithLocations : getSales(myLocationId);
-  const list = (dateFrom || dateTo) ? baseList.filter(s => (
-    (!dateFrom || s.date >= dateFrom) && (!dateTo || s.date <= dateTo)
-  )) : baseList;
+  const list = baseList.filter(s => (
+    (!dateFrom || s.date >= dateFrom) &&
+    (!dateTo || s.date <= dateTo) &&
+    (locationFilter === 'all' || String(s.locationId) === String(locationFilter))
+  ));
   const total = list.reduce((sum, s) => sum + s.total, 0);
-  const filteringActive = !!(dateFrom || dateTo);
+  const filteringActive = !!(dateFrom || dateTo || locationFilter !== 'all');
 
-  useEffect(() => { setPage(1); }, [dateFrom, dateTo]);
+  useEffect(() => { setPage(1); }, [dateFrom, dateTo, locationFilter]);
 
   // KIPENGELE: "Pagination" - mauzo yakiwa mengi, onyesha 50 kwa wakati
   // mmoja pekee, na buttons za Next/Previous kuvinjari yaliyobaki.
@@ -101,8 +107,19 @@ export default function Sales() {
           <label className="form-label" style={{ fontSize: 12 }}>📅 Mpaka</label>
           <input type="date" className="form-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </div>
+        {manager && (
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" style={{ fontSize: 12 }}>🏬 Duka/Store</label>
+            <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+              <option value="all">Maeneo Yote</option>
+              {locations.map(loc => (
+                <option key={loc.id} value={loc.id}>{loc.type === 'store' ? '🏪' : '🏬'} {loc.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {filteringActive && (
-          <button className="btn-ghost" onClick={() => { setDateFrom(''); setDateTo(''); }}>✖️ Futa Kichujio</button>
+          <button className="btn-ghost" onClick={() => { setDateFrom(''); setDateTo(''); setLocationFilter('all'); }}>✖️ Futa Kichujio</button>
         )}
       </div>
 

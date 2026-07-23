@@ -284,6 +284,33 @@ export function DataProvider({ children }) {
     }
   }, [products, logInventoryAddition]);
 
+  // KIPENGELE: "Sasisha Bei Kila Mahali" - ukibadilisha bei ya bidhaa
+  // (jina+size+brand sawa) katika duka MOJA, badiliko hili la BEI (buy/sell)
+  // linaenea moja kwa moja kwenye bidhaa ILE ILE kwenye maduka/store
+  // MENGINE yote yenye bidhaa hiyo - ili usilazimike kuenda kubadilisha
+  // duka moja baada ya jingine. Stock, jina, size, brand, na category
+  // za maduka mengine HAZIGUSWI - ni BEI (buy/sell) tu inayosambazwa.
+  const updateProductEverywhere = useCallback(async (id, payload, applyPriceToAll) => {
+    await updateProduct(id, payload);
+    if (!applyPriceToAll) return;
+
+    const { name, size, brand, buy, sell } = payload;
+    const nName = norm(name);
+    const nSize = norm(size);
+    const nBrand = norm(brand);
+    const matches = products.filter(p => (
+      String(p.id) !== String(id) &&
+      norm(p.name) === nName && norm(p.size) === nSize && norm(p.brand) === nBrand
+    ));
+    if (matches.length === 0) return;
+
+    const ids = matches.map(p => p.id);
+    const { error } = await sb.from('products').update({ buy_price: buy, sell_price: sell }).in('id', ids);
+    if (error) throw new Error(error.message);
+    setProducts(prev => prev.map(p => (ids.some(x => String(x) === String(p.id)) ? { ...p, buy, sell } : p)));
+    return matches.length;
+  }, [products, updateProduct]);
+
   // KIPENGELE: "Automation ya Price" - ukiongeza bidhaa ILIYOKUWEPO TAYARI
   // kwenye location hiyo hiyo (jina+size+brand vinalingana), badala ya
   // kuunda mstari mpya (duplicate), tunaongeza (merge) stock ya iliyopo
@@ -1973,7 +2000,7 @@ export function DataProvider({ children }) {
     locations, stores, shops, locationsLoading,
     loadLocations, addLocation, updateLocation, deleteLocation, getLocation,
     products, productsLoading, allProductsWithLocations, getProducts, knownBrands,
-    loadProducts, addProduct, updateProduct, deleteProduct, bulkDeleteProducts, findMatchingProduct, bulkAddProducts,
+    loadProducts, addProduct, updateProduct, updateProductEverywhere, deleteProduct, bulkDeleteProducts, findMatchingProduct, bulkAddProducts,
     inventoryLogs, inventoryLogsLoading, loadInventoryLogs, dailyInventorySummary, deleteInventoryLog, updateInventoryLog,
     sales, salesLoading, allSalesWithLocations, getSales, totalAllSales, dailySalesSummary,
     loadSales, addSale, updateSale, deleteSale,

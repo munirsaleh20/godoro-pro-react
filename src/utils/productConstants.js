@@ -1,12 +1,12 @@
 export const PRODUCT_NAMES = [
   'Vita supreme', 'Vita supreme pq', 'Vita Raha', 'Vitaraha+', 'Vitaraha spring',
-  'Furaha', 'Furaha pq', 'Furaha tx', 'Furaha pan', 'Super banco', 'Banco royal',
-  'Arusha deluxe', 'Victoria tx', 'Victoria pan', 'Victoria', 'Besti Arusha',
+  'Vita raha pq', 'Furaha', 'Furaha pq', 'Furaha tx', 'Furaha pan', 'Super banco', 'Banco royal',
+  'Arusha deluxe', 'Victoria tx', 'Victoria pan', 'Victoria', 'Besti Arusha', 'Besti PQ',
   'Comfy', 'Tuff tx', 'Tuff pan', 'Tuff', 'Goldsun premium', 'Goldsun standard',
   'Breeze', 'Jumbo', 'Goldstar', 'Goldstar tx', 'Goldstar pan', 'Dodoma',
-  'Dodoma pq', 'Dodoma spring', 'Tanfoam', 'Lolita', 'Tanfoam Premium', 'Mbeya',
+  'Dodoma pq', 'Dodoma spring', 'Tanfoam', 'Tanfoam superfoam', 'Tanfoam visco', 'Lolita', 'Tanfoam Premium', 'Mbeya',
   'Mbeya tx', 'Mbeya pan', 'Family foam', 'Family foam pq', 'Family spring',
-  'Mnazi mwepesi', 'Mnazi ngumu', 'Sheet',
+  'Mnazi mwepesi', 'Mnazi ngumu', 'Mnazi spring', 'Everflex', 'Sheet',
 ];
 
 export const PRODUCT_SIZES = [

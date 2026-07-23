@@ -5,7 +5,7 @@ import { fmtS, today } from '../utils/format.js';
 
 export default function Reports() {
   const { isOwner } = useAuth();
-  const { sales, expenses, locations, products, wholesaleTransactions } = useData();
+  const { sales, expenses, locations, products, wholesaleTransactions, getStaffName } = useData();
 
   const [period, setPeriod] = useState('month'); // today | month | year | all
   const [locationId, setLocationId] = useState('all');
@@ -175,6 +175,27 @@ export default function Reports() {
   const totalStockUnits = inventoryProducts.reduce((sum, p) => sum + (p.stock || 0), 0);
   const potentialProfit = stockValueAtSellPrice - stockValueAtBuyPrice;
 
+  // Muhtasari wa kila siku kwa kila muuzaji (salesperson) - kwa duka
+  // lake alilotumia kuuzia. Inaheshimu filters za "period" na "location"
+  // zilizopo juu, ili uweze kuona muuzaji mmoja/duka moja ukitaka.
+  const salespersonDailyBreakdown = useMemo(() => {
+    const map = {};
+    filteredSales.forEach(s => {
+      if (!s.date || !s.staffId) return;
+      const key = `${s.date}__${s.staffId}__${s.locationId}`;
+      if (!map[key]) {
+        map[key] = {
+          key, date: s.date, staffId: s.staffId, locationId: s.locationId,
+          revenue: 0, count: 0,
+        };
+      }
+      map[key].revenue += actualPaidAmount(s);
+      map[key].count += 1;
+    });
+    return Object.values(map).sort((a, b) => b.date.localeCompare(a.date) || String(a.staffId).localeCompare(String(b.staffId)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSales]);
+
   return (
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
@@ -340,6 +361,43 @@ export default function Reports() {
                   <td style={{ padding: 8, fontWeight: 700, color: d.profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(d.profit)}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <h3 className="section-title" style={{ margin: '20px 0 12px' }}>🧑‍💼 Muhtasari wa Muuzaji kwa Siku (Salesperson Daily Summary)</h3>
+      <div className="table-container" style={{ overflowX: 'auto' }}>
+        {salespersonDailyBreakdown.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">🧑‍💼</div>
+            <div className="empty-title">No Data</div>
+            <div>No sales recorded by any salesperson for this period</div>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
+                <th style={{ padding: 8 }}>Date</th>
+                <th style={{ padding: 8 }}>Salesperson</th>
+                <th style={{ padding: 8 }}>Shop/Store</th>
+                <th style={{ padding: 8 }}>Sales</th>
+                <th style={{ padding: 8 }}>Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {salespersonDailyBreakdown.map(row => {
+                const loc = locations.find(l => String(l.id) === String(row.locationId));
+                return (
+                  <tr key={row.key} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: 8 }}>{row.date}</td>
+                    <td style={{ padding: 8, fontWeight: 600 }}>{getStaffName(row.staffId)}</td>
+                    <td style={{ padding: 8 }}>{loc ? `${loc.type === 'store' ? '🏪' : '🏬'} ${loc.name}` : '—'}</td>
+                    <td style={{ padding: 8 }}>{row.count}</td>
+                    <td style={{ padding: 8, fontWeight: 700, color: '#16a34a' }}>{fmtS(row.revenue)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

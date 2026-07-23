@@ -5,6 +5,8 @@ import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import Modal from '../components/Modal.jsx';
 import StoreProductsModal from '../components/StoreProductsModal.jsx';
+import AddSaleModal from '../components/AddSaleModal.jsx';
+import BulkSaleModal from '../components/BulkSaleModal.jsx';
 
 const EMPTY_FORM = { name: '', location: '', type: 'store', phone: '', email: '' };
 
@@ -25,6 +27,8 @@ export default function Locations({ type }) {
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState('');
   const [viewingLocation, setViewingLocation] = useState(null);
+  const [sellingLocation, setSellingLocation] = useState(null);
+  const [bulkSellingLocation, setBulkSellingLocation] = useState(null);
 
   if (!isManager()) {
     return (
@@ -109,6 +113,8 @@ export default function Locations({ type }) {
             </div>
             <div className="store-footer">{loc.phone || 'No phone'} {loc.email ? `• ${loc.email}` : ''}</div>
             <div className="card-actions">
+              <button className="btn-ghost small" style={{ color: '#e07b2a' }} onClick={() => setSellingLocation(loc)}>🛒 Sell</button>
+              <button className="btn-ghost small" style={{ color: '#0d9488' }} onClick={() => setBulkSellingLocation(loc)}>📦 Bulk Sell</button>
               <button className="btn-ghost small" style={{ color: '#0d9488' }} onClick={() => setViewingLocation(loc)}>📋 View Products</button>
               <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => openEdit(loc)}>✏️ Edit</button>
               <button className="btn-ghost small" style={{ color: '#dc2626' }} onClick={() => handleDelete(loc)}>🗑️ Delete</button>
@@ -155,6 +161,18 @@ export default function Locations({ type }) {
         location={viewingLocation}
         products={viewingLocation ? getProducts(viewingLocation.id) : []}
         onClose={() => setViewingLocation(null)}
+      />
+
+      <AddSaleModal
+        open={!!sellingLocation}
+        lockedLocationId={sellingLocation ? sellingLocation.id : null}
+        onClose={() => setSellingLocation(null)}
+      />
+
+      <BulkSaleModal
+        open={!!bulkSellingLocation}
+        lockedLocationId={bulkSellingLocation ? bulkSellingLocation.id : null}
+        onClose={() => setBulkSellingLocation(null)}
       />
     </div>
   );

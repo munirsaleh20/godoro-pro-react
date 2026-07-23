@@ -10,6 +10,7 @@ const emptyForm = () => ({
   sizeSel: '', sizeOther: '',
   brandSel: '', brandOther: '',
   buy: '', sell: '', stock: '', cat: 'Spring', locationId: '',
+  applyPriceToAll: true,
 });
 
 // mode: 'add' | 'edit'
@@ -42,6 +43,7 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
         stock: initial.stock ?? '',
         cat: initial.cat || 'Spring',
         locationId: initial.locationId || '',
+        applyPriceToAll: true,
       });
     } else {
       setForm({ ...emptyForm(), locationId: locationOptions?.[0]?.id || '' });
@@ -91,6 +93,7 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
         stock: stockNum,
         cat: form.cat,
         locationId: form.locationId,
+        applyPriceToAll: mode === 'edit' ? form.applyPriceToAll : false,
       });
     } catch (e) {
       setErr(e.message);
@@ -192,6 +195,22 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {mode === 'edit' && (
+        <div className="form-group" style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 8, padding: 10 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              style={{ marginTop: 2 }}
+              checked={form.applyPriceToAll}
+              onChange={(e) => setForm({ ...form, applyPriceToAll: e.target.checked })}
+            />
+            <span>
+              🔁 Sasisha Buy/Sell Price hii kwenye <strong>maduka/store MENGINE yote</strong> yenye bidhaa hii hii (jina + size + brand sawa). Stock haitaguswa kule.
+            </span>
+          </label>
         </div>
       )}
 
