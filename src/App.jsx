@@ -12,12 +12,13 @@ import Staff from './pages/Staff.jsx';
 import Debts from './pages/Debts.jsx';
 import Expenses from './pages/Expenses.jsx';
 import Transfers from './pages/Transfers.jsx';
+import Returns from './pages/Returns.jsx';
 import Reports from './pages/Reports.jsx';
 import Suppliers from './pages/Suppliers.jsx';
 
 const VALID_PAGES = [
   'dashboard', 'sales', 'inventory', 'staff', 'debts',
-  'expenses', 'transfers', 'reports', 'stores', 'shops', 'suppliers',
+  'expenses', 'transfers', 'returns', 'reports', 'stores', 'shops', 'suppliers',
 ];
 
 // Inasoma ukurasa wa sasa kutoka kwenye URL (#debts, #sales, n.k.) ili
@@ -30,7 +31,7 @@ function pageFromHash() {
 
 export default function App() {
   const { currentUser, authLoading } = useAuth();
-  const { loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, loadInventoryLogs } = useData();
+  const { loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadReturns, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, loadInventoryLogs } = useData();
   const { showToast } = useToast();
   const [page, setPageState] = useState(pageFromHash);
   const [dataLoading, setDataLoading] = useState(false);
@@ -96,13 +97,13 @@ export default function App() {
       // ombi la data hii kutoka kwenye mtandao (achilia mbali kuiona), hivyo
       // hatuiiti kabisa kwake.
       const isOwnerOrManager = currentUser.role === 'owner' || currentUser.role === 'manager';
-      const loaders = [loadLocations(), loadProducts(), loadSales(), loadStaff(), loadDebts(), loadExpenses(), loadTransfers()];
+      const loaders = [loadLocations(), loadProducts(), loadSales(), loadStaff(), loadDebts(), loadExpenses(), loadTransfers(), loadReturns()];
       if (isOwnerOrManager) loaders.push(loadWholesaleCustomers(), loadWholesaleTransactions(), loadSuppliers(), loadSupplierTransactions(), loadInventoryLogs());
       Promise.all(loaders)
         .catch((err) => showToast('Failed to load data: ' + err.message, 'error'))
         .finally(() => setDataLoading(false));
     }
-  }, [currentUser, loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, loadInventoryLogs, showToast]);
+  }, [currentUser, loadLocations, loadProducts, loadSales, loadStaff, loadDebts, loadExpenses, loadTransfers, loadReturns, loadWholesaleCustomers, loadWholesaleTransactions, loadSuppliers, loadSupplierTransactions, loadInventoryLogs, showToast]);
 
   if (authLoading) {
     return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
@@ -151,6 +152,7 @@ export default function App() {
               {page === 'suppliers' && <Suppliers />}
               {page === 'expenses' && <Expenses />}
               {page === 'transfers' && <Transfers />}
+              {page === 'returns' && <Returns />}
               {page === 'reports' && <Reports />}
               {page === 'stores' && <Locations type="store" />}
               {page === 'shops' && <Locations type="shop" />}

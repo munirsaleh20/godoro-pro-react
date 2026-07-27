@@ -7,6 +7,7 @@ import { fmtS } from '../utils/format.js';
 import AddSaleModal from '../components/AddSaleModal.jsx';
 import BulkSaleModal from '../components/BulkSaleModal.jsx';
 import EditSaleModal from '../components/EditSaleModal.jsx';
+import ReturnModal from '../components/ReturnModal.jsx';
 
 export default function Sales() {
   const { currentUser, isManager, isOwner } = useAuth();
@@ -17,6 +18,7 @@ export default function Sales() {
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [editSale, setEditSale] = useState(null);
+  const [returnSale, setReturnSale] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
   const [expandedSalesDate, setExpandedSalesDate] = useState(null);
   // KIPENGELE: "Date Range Filter" - mauzo yakiwa mengi, chagua tarehe
@@ -61,6 +63,15 @@ export default function Sales() {
       showToast('🗑️ Sale deleted!');
     } catch (err) {
       showToast('Failed to delete: ' + err.message, 'error');
+    }
+  };
+
+  const handleReturnDone = (result, action) => {
+    setReturnSale(null);
+    if (action === 'exchange') {
+      showToast(`✅ Exchange recorded! Refund value: ${fmtS(result.refundAmount)}, new item: ${fmtS(result.exchangeTotal)}`);
+    } else {
+      showToast(`✅ Return recorded! Refund value: ${fmtS(result.refundAmount)}`);
     }
   };
 
@@ -282,6 +293,9 @@ export default function Sales() {
                   {manager && (
                     <td style={{ padding: 8, whiteSpace: 'nowrap' }}>
                       <button className="btn-ghost small" style={{ color: '#2563eb' }} onClick={() => setEditSale(s)}>✏️</button>
+                      {s.quantity > 0 && (
+                        <button className="btn-ghost small" style={{ color: '#d97706', marginLeft: 4 }} title="Return / Exchange" onClick={() => setReturnSale(s)}>↩️</button>
+                      )}
                       <button className="btn-ghost small" style={{ color: '#dc2626', marginLeft: 4 }} onClick={() => handleDelete(s)}>🗑️</button>
                     </td>
                   )}
@@ -318,6 +332,12 @@ export default function Sales() {
         open={!!editSale}
         sale={editSale}
         onClose={() => setEditSale(null)}
+      />
+      <ReturnModal
+        open={!!returnSale}
+        sale={returnSale}
+        onClose={() => setReturnSale(null)}
+        onDone={handleReturnDone}
       />
     </div>
   );

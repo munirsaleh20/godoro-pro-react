@@ -3,19 +3,21 @@ import Modal from './Modal.jsx';
 import { useData } from '../context/DataContext.jsx';
 
 export default function TransferModal({ open, onClose, onSubmit, mode = 'add', initial = null }) {
-  const { stores, shops, getProducts } = useData();
+  const { locations, getProducts } = useData();
   const isEdit = mode === 'edit';
 
   const [fromStore, setFromStore] = useState('');
   const [toShop, setToShop] = useState('');
   const [note, setNote] = useState('');
   const [quantities, setQuantities] = useState({}); // productId (or "name|size" in edit mode) -> qty string
+  const [search, setSearch] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setErr('');
+    setSearch('');
     if (isEdit && initial) {
       setFromStore(initial.fromLocationId || '');
       setToShop(initial.toLocationId || '');
@@ -26,14 +28,19 @@ export default function TransferModal({ open, onClose, onSubmit, mode = 'add', i
       });
       setQuantities(q);
     } else {
-      setFromStore(stores[0]?.id || '');
+      setFromStore(locations[0]?.id || '');
       setToShop('');
       setNote('');
       setQuantities({});
     }
-  }, [open, stores, isEdit, initial]);
+  }, [open, locations, isEdit, initial]);
 
   const storeProducts = useMemo(() => (fromStore ? getProducts(fromStore) : []), [fromStore, getProducts]);
+
+  // Marudio yanayoruhusiwa: eneo lolote (store au shop) isipokuwa lililo
+  // chanzo lenyewe - kwa hiyo store→store, store→shop, shop→store, na
+  // shop→shop zote zinaruhusiwa.
+  const toOptions = useMemo(() => locations.filter(l => String(l.id) !== String(fromStore)), [locations, fromStore]);
 
   // Katika hali ya "add", tunaonyesha bidhaa zote za store husika.
   // Katika hali ya "edit", tunaonyesha bidhaa zilizokuwa kwenye uhamisho
@@ -55,9 +62,22 @@ export default function TransferModal({ open, onClose, onSubmit, mode = 'add', i
     });
   }, [isEdit, initial, storeProducts]);
 
-  const rows = isEdit ? editRows : storeProducts.map(p => ({ key: p.id, name: p.name, size: p.size, buy: p.buy, sell: p.sell, cat: p.cat, brand: p.brand, stock: p.stock, maxQty: p.stock }));
+  const allRows = isEdit ? editRows : storeProducts.map(p => ({ key: p.id, name: p.name, size: p.size, buy: p.buy, sell: p.sell, cat: p.cat, brand: p.brand, stock: p.stock, maxQty: p.stock }));
 
-  const summaryItems = rows
+  // KIPENGELE: "Search products" - tafuta bidhaa ya kuhamisha kwa jina,
+  // ukubwa, au brand, badala ya kuvinjari orodha ndefu ya bidhaa zote.
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allRows;
+    return allRows.filter(r => (
+      r.name.toLowerCase().includes(q) ||
+      (r.size || '').toLowerCase().includes(q) ||
+      (r.brand || '').toLowerCase().includes(q)
+    ));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allRows, search]);
+
+  const summaryItems = allRows
     .map(r => ({ ...r, qty: parseInt(quantities[r.key], 10) || 0 }))
     .filter(r => r.qty > 0);
   const totalUnits = summaryItems.reduce((sum, r) => sum + r.qty, 0);
@@ -85,46 +105,57 @@ export default function TransferModal({ open, onClose, onSubmit, mode = 'add', i
   };
 
   return (
-    <Modal open={open} title={isEdit ? '✏️ Edit Transfer — Store → Shop' : '📦 Transfer Products — Store → Shop'} onClose={onClose}>
+    <Modal open={open} title={isEdit ? '✏️ Edit Transfer' : '📦 Transfer Products'} onClose={onClose}>
       {err && <div className="form-error">{err}</div>}
 
       <div className="form-row">
         <div className="form-group">
-          <label className="form-label">📦 From Store (Warehouse) <span className="required">*</span></label>
+          <label className="form-label">📤 From (Store or Shop) <span className="required">*</span></label>
           <select
             className="form-select" value={fromStore} disabled={isEdit}
-            onChange={(e) => { setFromStore(e.target.value); if (!isEdit) setQuantities({}); }}
+            onChange={(e) => { setFromStore(e.target.value); if (!isEdit) { setToShop(''); setQuantities({}); } }}
           >
-            <option value="">-- Select Store --</option>
-            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <option value="">-- Select Location --</option>
+            {locations.map(l => <option key={l.id} value={l.id}>{l.type === 'store' ? '🏪' : '🏬'} {l.name} ({l.type === 'store' ? 'Store' : 'Shop'})</option>)}
           </select>
         </div>
         <div className="form-group">
-          <label className="form-label">🏬 To Shop (Outlet) <span className="required">*</span></label>
+          <label className="form-label">📥 To (Store or Shop) <span className="required">*</span></label>
           <select className="form-select" value={toShop} disabled={isEdit} onChange={(e) => setToShop(e.target.value)}>
-            <option value="">-- Select Shop --</option>
-            {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <option value="">-- Select Location --</option>
+            {toOptions.map(l => <option key={l.id} value={l.id}>{l.type === 'store' ? '🏪' : '🏬'} {l.name} ({l.type === 'store' ? 'Store' : 'Shop'})</option>)}
           </select>
         </div>
       </div>
-      {isEdit && (
-        <div style={{ fontSize: 12, color: '#64748b', marginTop: -6, marginBottom: 10 }}>
-          Source and destination can't be changed when editing — only quantities and note.
-        </div>
-      )}
+      <div style={{ fontSize: 12, color: '#64748b', marginTop: -6, marginBottom: 10 }}>
+        {isEdit
+          ? "Source and destination can't be changed when editing — only quantities and note."
+          : 'You can transfer between any two locations — Store → Store, Store → Shop, Shop → Store, or Shop → Shop.'}
+      </div>
 
       {fromStore && (
-        rows.length === 0 ? (
+        allRows.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📭</div>
             <div className="empty-title">No Products</div>
-            <div>This store has no products. Add products first.</div>
+            <div>This location has no products. Add products first.</div>
           </div>
         ) : (
           <div>
             <div style={{ background: '#1a1a2e', color: '#fff', padding: '10px 14px', borderRadius: '8px 8px 0 0', fontSize: 13, fontWeight: 700 }}>
               📋 {isEdit ? 'Adjust Quantities Transferred' : 'Select Products and Quantities to Transfer'}
             </div>
+            <div style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderTop: 'none' }}>
+              <input
+                className="form-input" placeholder="🔍 Search products by name, size, or brand..."
+                value={search} onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {rows.length === 0 ? (
+              <div style={{ padding: 16, textAlign: 'center', color: '#94a3b8', border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 8px 8px', fontSize: 13 }}>
+                No products match "{search}".
+              </div>
+            ) : (
             <div style={{ border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 8px 8px', maxHeight: 280, overflowY: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead style={{ position: 'sticky', top: 0, background: '#f8fafc' }}>
@@ -152,6 +183,7 @@ export default function TransferModal({ open, onClose, onSubmit, mode = 'add', i
                 </tbody>
               </table>
             </div>
+            )}
 
             <div className="form-group" style={{ marginTop: 12 }}>
               <label className="form-label">Note (optional)</label>

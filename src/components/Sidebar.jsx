@@ -11,6 +11,7 @@ export const NAV_ITEMS = [
   { key: 'expenses', label: '💸 Expenses', roles: ['owner', 'manager', 'salesperson'] },
   { key: 'inventory', label: '📦 Inventory', roles: ['owner', 'manager', 'salesperson'] },
   { key: 'transfers', label: '🔄 Transfers', roles: ['owner', 'manager'] },
+  { key: 'returns', label: '↩️ Returns', roles: ['owner', 'manager'] },
   { key: 'reports', label: '📊 Profit & Reports', roles: ['owner'] },
   { key: 'staff', label: '👥 Staff', roles: ['owner', 'manager'] },
   { key: 'stores', label: '🏪 Stores', roles: ['owner', 'manager'] },

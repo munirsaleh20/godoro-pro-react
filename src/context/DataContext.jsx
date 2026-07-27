@@ -46,6 +46,8 @@ export function DataProvider({ children }) {
   const [supplierTransactionsLoading, setSupplierTransactionsLoading] = useState(false);
   const [inventoryLogs, setInventoryLogs] = useState([]); // { id, locationId, productId, name, size, brand, qty, unitPrice, totalValue, isNewProduct, date }
   const [inventoryLogsLoading, setInventoryLogsLoading] = useState(false);
+  const [returns, setReturns] = useState([]); // { id, originalSaleId, locationId, staffId, customer, phone, type, returnedProductId, returnedName, returnedSize, returnedQuantity, refundAmount, exchangeSaleId, exchangeProductId, exchangeName, exchangeSize, exchangeQuantity, exchangeTotal, differenceAmount, note, date }
+  const [returnsLoading, setReturnsLoading] = useState(false);
 
   // ---------------- Locations ----------------
   const loadLocations = useCallback(async () => {
@@ -1373,6 +1375,150 @@ export function DataProvider({ children }) {
     }));
   }, [transfers, getLocation]);
 
+  // ---------------- Returns / Exchanges ----------------
+  const loadReturns = useCallback(async () => {
+    setReturnsLoading(true);
+    try {
+      const { data, error } = await sb.from('returns').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      setReturns((data || []).map(r => ({
+        id: r.id,
+        originalSaleId: r.original_sale_id,
+        locationId: r.location_id,
+        staffId: r.staff_id,
+        customer: r.customer_name || '',
+        phone: r.customer_phone || '',
+        type: r.type,
+        returnedProductId: r.returned_product_id,
+        returnedName: r.returned_name,
+        returnedSize: r.returned_size || '',
+        returnedQuantity: r.returned_quantity || 0,
+        refundAmount: r.refund_amount || 0,
+        exchangeSaleId: r.exchange_sale_id,
+        exchangeProductId: r.exchange_product_id,
+        exchangeName: r.exchange_name || '',
+        exchangeSize: r.exchange_size || '',
+        exchangeQuantity: r.exchange_quantity || 0,
+        exchangeTotal: r.exchange_total || 0,
+        differenceAmount: r.difference_amount || 0,
+        note: r.note || '',
+        date: (r.created_at || '').split('T')[0],
+      })));
+    } catch (err) {
+      console.error('loadReturns error:', err);
+      throw err;
+    } finally {
+      setReturnsLoading(false);
+    }
+  }, []);
+
+  // Kurudisha bidhaa (return) au kubadilisha (exchange) baada ya mauzo
+  // kukamilika. Hatuguzi/kufuti sale ya awali - tunapunguza tu quantity/
+  // total/paid yake kwa kiasi kilichorudishwa (ili ripoti za faida
+  // ziendelee kuwa sahihi), na kama ni exchange, tunatengeneza sale MPYA
+  // kwa bidhaa aliyoibadilisha nayo mteja (ikitoa stock kama mauzo ya
+  // kawaida). Tofauti kati ya thamani ya alicho rudisha na thamani ya
+  // alichochukua kipya inarudishwa kwa mtumiaji ili aijue (deni/urudishaji
+  // wa pesa taslimu).
+  const recordReturn = useCallback(async ({ saleId, returnQuantity, exchange, note, currentUserId, method }) => {
+    const sale = sales.find(s => String(s.id) === String(saleId));
+    if (!sale) throw new Error('Mauzo husika hayakupatikana.');
+
+    const qty = parseInt(returnQuantity, 10) || 0;
+    if (qty <= 0) throw new Error('Weka idadi sahihi ya kurudisha.');
+    if (qty > sale.quantity) throw new Error(`Idadi ya kurudisha haiwezi kuzidi idadi iliyouzwa (${sale.quantity}).`);
+
+    const refundAmount = Math.round(sale.unitPrice * qty);
+
+    // 1) Rudisha stock ya bidhaa iliyorudishwa (kama ilitoka kwenye stock,
+    // si "manual price" sale isiyo na bidhaa maalum).
+    if (sale.productId) {
+      const product = products.find(p => String(p.id) === String(sale.productId));
+      if (product) {
+        await updateProduct(product.id, {
+          name: product.name, size: product.size, brand: product.brand,
+          buy: product.buy, sell: product.sell, cat: product.cat,
+          stock: product.stock + qty,
+        });
+      }
+    }
+
+    // 2) Punguza sale ya awali kwa kiasi kilichorudishwa
+    const newQuantity = sale.quantity - qty;
+    const newTotal = Math.max(0, sale.total - refundAmount);
+    const newPaid = Math.min(sale.paid, newTotal);
+    const newStatus = newPaid >= newTotal ? 'Paid' : 'Debt';
+    const baseItemLabel = sale.items.replace(/\s*x\d+\s*$/, '').trim();
+    const newItems = newQuantity > 0 ? `${baseItemLabel} x${newQuantity}` : `${baseItemLabel} (Returned)`;
+
+    await updateSale(saleId, {
+      customer: sale.customer, items: newItems, total: newTotal, paid: newPaid,
+      status: newStatus, method: sale.method, date: sale.date,
+    });
+    setSales(prev => prev.map(s => (String(s.id) === String(saleId)
+      ? { ...s, quantity: newQuantity, items: newItems, total: newTotal, paid: newPaid, status: newStatus } : s)));
+
+    // 3) Kama ni exchange, tengeneza sale MPYA kwa bidhaa aliyochukua mteja
+    let exchangeSaleRecord = null;
+    let exchangeTotal = 0;
+    if (exchange && exchange.productId && exchange.quantity > 0) {
+      const creditApplied = Math.min(refundAmount, exchange.quantity * exchange.unitPrice);
+      exchangeSaleRecord = await addSale({
+        locationId: sale.locationId,
+        staffId: currentUserId,
+        customer: sale.customer,
+        phone: sale.phone,
+        productId: exchange.productId,
+        displayName: exchange.displayName,
+        manualPrice: 0,
+        quantity: exchange.quantity,
+        method: method || sale.method,
+        paid: creditApplied,
+      });
+      exchangeTotal = exchangeSaleRecord.total;
+    }
+
+    const differenceAmount = Math.round(exchangeTotal - refundAmount);
+
+    // 4) Hifadhi kumbukumbu ya tukio hili kwa ajili ya ripoti/audit
+    const { data, error } = await sb.from('returns').insert({
+      original_sale_id: saleId,
+      location_id: sale.locationId,
+      staff_id: currentUserId,
+      customer_name: sale.customer,
+      customer_phone: sale.phone || null,
+      type: exchange ? 'exchange' : 'return',
+      returned_product_id: sale.productId,
+      returned_name: baseItemLabel,
+      returned_size: null,
+      returned_quantity: qty,
+      refund_amount: refundAmount,
+      exchange_sale_id: exchangeSaleRecord ? exchangeSaleRecord.id : null,
+      exchange_product_id: exchange ? exchange.productId : null,
+      exchange_name: exchange ? exchange.displayName : null,
+      exchange_quantity: exchange ? exchange.quantity : null,
+      exchange_total: exchange ? exchangeTotal : null,
+      difference_amount: exchange ? differenceAmount : 0,
+      note: note || '',
+      recorded_by: currentUserId,
+    }).select().single();
+    if (error) throw new Error(error.message);
+
+    const returnRecord = {
+      id: data.id, originalSaleId: data.original_sale_id, locationId: data.location_id,
+      staffId: data.staff_id, customer: data.customer_name || '', phone: data.customer_phone || '',
+      type: data.type, returnedProductId: data.returned_product_id, returnedName: data.returned_name,
+      returnedSize: data.returned_size || '', returnedQuantity: data.returned_quantity || 0,
+      refundAmount: data.refund_amount || 0, exchangeSaleId: data.exchange_sale_id,
+      exchangeProductId: data.exchange_product_id, exchangeName: data.exchange_name || '',
+      exchangeQuantity: data.exchange_quantity || 0, exchangeTotal: data.exchange_total || 0,
+      differenceAmount: data.difference_amount || 0, note: data.note || '',
+      date: (data.created_at || '').split('T')[0],
+    };
+    setReturns(prev => addUnique(prev, returnRecord));
+    return { ...returnRecord, refundAmount, exchangeTotal, differenceAmount };
+  }, [sales, products, updateProduct, updateSale, addSale]);
+
   // ---------------- Wholesale (Jumla) ----------------
   // Tofauti na "Debts" (ambazo zinatokana na mauzo ya mtu mmoja-mmoja),
   // Wholesale ni maduka yanayochukua mzigo kwa MKOPO mara kwa mara, wanauza
@@ -2012,6 +2158,7 @@ export function DataProvider({ children }) {
     loadExpenses, addExpense, updateExpense, deleteExpense,
     transfers, transfersLoading, allTransfersWithLocations,
     loadTransfers, executeTransfer, updateTransfer, deleteTransfer,
+    returns, returnsLoading, loadReturns, recordReturn,
     wholesaleCustomers, wholesaleCustomersLoading, wholesaleCustomersWithSummary,
     wholesaleTransactions, wholesaleTransactionsLoading, totalWholesaleDebt,
     loadWholesaleCustomers, addWholesaleCustomer, updateWholesaleCustomer, deleteWholesaleCustomer,
