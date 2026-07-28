@@ -1844,7 +1844,15 @@ export function DataProvider({ children }) {
 
     const resolvedItems = [];
     for (const it of items) {
-      const existing = findMatchingProduct(locationId, it.name, it.size);
+      // MUHIMU: hapa tunapokea mzigo/stock MPYA, hivyo lazima tutumie
+      // findExactLocationProduct (jina+size+brand vinalingana SAWASAWA) -
+      // si findMatchingProduct (ile ni fuzzy match ya "Sales" pekee, na
+      // ina "Tier 2" inayolingana kwa JINA TU ikipuuza size kabisa). Kutumia
+      // findMatchingProduct hapa kulisababisha bug: mtumiaji akipokea
+      // bidhaa yenye size tofauti (mfano "5x6x8") lakini jina lililokuwepo
+      // tayari kwa size tofauti ("5x6x10"), mzigo ulikuwa ukiunganishwa
+      // kimakosa kwenye bidhaa ya size isiyo sahihi.
+      const existing = findExactLocationProduct(locationId, it.name, it.size, it.brand);
       if (existing) {
         await updateProduct(existing.id, {
           name: existing.name, size: existing.size, brand: it.brand || existing.brand,
@@ -1880,7 +1888,7 @@ export function DataProvider({ children }) {
     };
     setSupplierTransactions(prev => addUnique(prev, txn, false));
     return txn;
-  }, [findMatchingProduct, updateProduct, addProduct]);
+  }, [findExactLocationProduct, updateProduct, addProduct]);
 
   // Kurekodi MZIGO uliopokelewa kutoka kiwandani KWA MKOPO ambao
   // UNAPELEKWA MOJA KWA MOJA kwa mteja wa Wholesale (DROPSHIP) - mzigo
@@ -1995,7 +2003,7 @@ export function DataProvider({ children }) {
     if (locationId) {
       resolvedItems = [];
       for (const it of items) {
-        const existing = findMatchingProduct(locationId, it.name, it.size);
+        const existing = findExactLocationProduct(locationId, it.name, it.size, it.brand);
         if (existing) {
           await updateProduct(existing.id, {
             name: existing.name, size: existing.size, brand: it.brand || existing.brand,
@@ -2032,7 +2040,7 @@ export function DataProvider({ children }) {
     };
     setSupplierTransactions(prev => prev.map(t => (String(t.id) === String(id) ? updated : t)));
     return updated;
-  }, [supplierTransactions, products, updateProduct, findMatchingProduct, addProduct]);
+  }, [supplierTransactions, products, updateProduct, findExactLocationProduct, addProduct]);
 
   const deleteSupplierTransaction = useCallback(async (id) => {
     // NOTE: kufuta mstari wa "stock_in" HAKURUDISHI stock iliyokwisha

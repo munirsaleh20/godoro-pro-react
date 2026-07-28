@@ -51,7 +51,11 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
     // fulani (presetCustomerId), tunalazimisha njia ya Dropship moja kwa
     // moja na kuchagua mteja huyo - mizigo ya wateja wa jumla HAIRUHUSIWI
     // tena kutoka kwenye stock ya duka letu, lazima itoke kiwandani.
-    setLocationId(presetCustomerId ? DROPSHIP_VALUE : (locations[0]?.id || ''));
+    // KUMBUKA: hatuchagulii location kiotomatiki (mfano locations[0]) tena -
+    // hilo lilisababisha hatari ya kutuma mzigo kwenye duka/store LISILO
+    // sahihi bila mtumiaji kugundua, kama hakubadilisha dropdown kwa makini.
+    // Sasa lazima achague mwenyewe kila wakati.
+    setLocationId(presetCustomerId ? DROPSHIP_VALUE : '');
     setItems([]);
     setRow(emptyRow());
     setDescription('');
@@ -69,15 +73,35 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   const resolvedName = row.nameSel === OTHER_VALUE ? row.nameOther.trim() : row.nameSel;
   const resolvedSize = row.sizeSel === OTHER_VALUE ? row.sizeOther.trim() : row.sizeSel;
 
-  // Kama jina+size vinalingana na bidhaa iliyopo tayari kwenye duka hili,
-  // tunaonyesha hilo - itaongeza stock badala ya kuunda bidhaa mpya.
+  // Kama jina+size+brand vinalingana na bidhaa iliyopo tayari kwenye duka
+  // hili, tunaonyesha hilo - itaongeza stock badala ya kuunda bidhaa mpya.
+  // (Sharti hili linafanana KABISA na findExactLocationProduct upande wa
+  // server, ili kile kinachoonekana hapa kiwe sawa na kile kitakachotokea
+  // ukiwasilisha - vinginevyo bidhaa "iliyopo" kwenye jicho la mtumiaji
+  // ingeweza kuundwa upya kimakosa kwa sababu tu brand haikulingana.)
   const matchingExisting = useMemo(() => {
     if (!resolvedName) return null;
+    const nBrand = row.brand.trim().toLowerCase();
     return destProducts.find(p => (
       p.name.trim().toLowerCase() === resolvedName.toLowerCase() &&
-      (p.size || '').trim().toLowerCase() === (resolvedSize || '').trim().toLowerCase()
+      (p.size || '').trim().toLowerCase() === (resolvedSize || '').trim().toLowerCase() &&
+      (p.brand || '').trim().toLowerCase() === nBrand
     )) || null;
-  }, [destProducts, resolvedName, resolvedSize]);
+  }, [destProducts, resolvedName, resolvedSize, row.brand]);
+
+  // KIPENGELE: bei ijitokeze automatic - bidhaa ikishatambulika kama
+  // iliyopo tayari (jina+size+brand vinalingana), tunajaza moja kwa moja
+  // bei ya ununuzi na ya kuuza za mara ya mwisho, ili mtumiaji asilazimike
+  // kukumbuka/kuandika kila wakati - bado anaweza kuzibadilisha kama bei
+  // imepanda/imeshuka.
+  useEffect(() => {
+    if (!matchingExisting) return;
+    setRow(r => ({
+      ...r,
+      buyPrice: r.buyPrice || String(matchingExisting.buy ?? ''),
+      sellPrice: r.sellPrice || String(matchingExisting.sell ?? ''),
+    }));
+  }, [matchingExisting]);
 
   const addRowToItems = () => {
     setErr('');
@@ -233,6 +257,12 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
             <label className="form-label">📍 Eneo/Mahali Mzigo Unapelekwa (hiari)</label>
             <input className="form-input" value={deliveryLocation} onChange={(e) => setDeliveryLocation(e.target.value)} placeholder="mfano: Mwanza Mjini, karibu na stendi" />
           </div>
+        </div>
+      )}
+
+      {!isDropship && locationId && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12.5, color: '#16a34a', fontWeight: 700 }}>
+          ✅ Mzigo huu utaenda: {locations.find(l => String(l.id) === String(locationId))?.type === 'store' ? '🏪' : '🏬'} {locations.find(l => String(l.id) === String(locationId))?.name} — hakikisha ni sahihi kabla ya kuendelea.
         </div>
       )}
 
