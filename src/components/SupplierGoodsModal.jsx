@@ -25,7 +25,7 @@ const emptyRow = () => ({
 //      (b) deni la mteja wa jumla kwetu (kwa bei ya kuuza) - linaonekana
 //      moja kwa moja kwenye "sheet" ya Wholesale ya mteja huyo.
 export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, presetCustomerId }) {
-  const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary } = useData();
+  const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary, getWholesaleCustomerItemPrice } = useData();
   const [locationId, setLocationId] = useState('');
   const [items, setItems] = useState([]);
   const [row, setRow] = useState(emptyRow());
@@ -102,6 +102,26 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
       sellPrice: r.sellPrice || String(matchingExisting.sell ?? ''),
     }));
   }, [matchingExisting]);
+
+  // KIPENGELE: wateja wa jumla wana BEI YAO WENYEWE, tofauti na bei ya
+  // rejareja (product.sell) - kwa hiyo hatutafuti "matchingExisting" kwa
+  // dropship (haina maana, mzigo hauendi kwenye stock yetu). Badala yake,
+  // tunatafuta bei aliyokuwa akitozwa mteja huyu huyu wa jumla mara ya
+  // mwisho kwa bidhaa hii hii, ili bei/na faida vibaki sahihi kwa mteja
+  // huyo maalum badala ya kutumia bei ya rejareja kimakosa.
+  const wholesalePriceHint = useMemo(() => {
+    if (!isDropship || !wholesaleCustomerId || wholesaleCustomerId === NEW_CUSTOMER_VALUE || !resolvedName) return null;
+    return getWholesaleCustomerItemPrice(wholesaleCustomerId, resolvedName, resolvedSize);
+  }, [isDropship, wholesaleCustomerId, resolvedName, resolvedSize, getWholesaleCustomerItemPrice]);
+
+  useEffect(() => {
+    if (!wholesalePriceHint) return;
+    setRow(r => ({
+      ...r,
+      buyPrice: r.buyPrice || String(wholesalePriceHint.buyPrice || ''),
+      sellPrice: r.sellPrice || String(wholesalePriceHint.unitPrice || ''),
+    }));
+  }, [wholesalePriceHint]);
 
   const addRowToItems = () => {
     setErr('');
@@ -306,7 +326,16 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
         {resolvedName && (
           <div style={{ fontSize: 12, marginBottom: 10, color: matchingExisting ? '#16a34a' : '#e07b2a' }}>
             {isDropship
-              ? '🚚 Bidhaa hii itaenda moja kwa moja kwa mteja wa jumla - haitaingia kwenye Inventory ya duka letu.'
+              ? (
+                <>
+                  🚚 Bidhaa hii itaenda moja kwa moja kwa mteja wa jumla - haitaingia kwenye Inventory ya duka letu.
+                  {wholesalePriceHint && (
+                    <div style={{ marginTop: 4, color: '#0369a1' }}>
+                      💡 Mteja huyu alikuwa akitozwa <strong>{fmtS(wholesalePriceHint.unitPrice)}</strong> kwa bidhaa hii mara ya mwisho (bei ya jumla — tofauti na bei ya rejareja). Tumejaza moja kwa moja, unaweza kubadilisha.
+                    </div>
+                  )}
+                </>
+              )
               : (matchingExisting
                 ? `✅ Tayari ipo kwenye stock (${matchingExisting.stock}) - idadi itaongezwa hapo.`
                 : '🆕 Bidhaa mpya - itaundwa kwenye Inventory ya duka hili.')}
@@ -334,7 +363,8 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
           <div className="form-group">
             <label className="form-label">Bei ya Kuuza (Sell) {(isDropship || !matchingExisting) && <span className="required">*</span>}</label>
             <input className="form-input" type="number" min="0" value={row.sellPrice} onChange={(e) => setRow({ ...row, sellPrice: e.target.value })}
-              placeholder={matchingExisting ? `Iliyopo: ${matchingExisting.sell}` : '110000'} />
+              placeholder={wholesalePriceHint ? `Ya awali kwa mteja huyu: ${wholesalePriceHint.unitPrice}` : matchingExisting ? `Iliyopo: ${matchingExisting.sell}` : '110000'} />
+            {isDropship && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Hii ni bei ya JUMLA kwa mteja huyu — si lazima ifanane na bei ya rejareja.</div>}
           </div>
         </div>
 

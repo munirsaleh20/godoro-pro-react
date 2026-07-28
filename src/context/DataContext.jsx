@@ -1757,6 +1757,30 @@ export function DataProvider({ children }) {
     wholesaleCustomersWithSummary.find(c => String(c.id) === String(id))
   ), [wholesaleCustomersWithSummary]);
 
+  // KIPENGELE: bei ya mteja wa jumla ni TOFAUTI na bei ya mteja wa kawaida
+  // (rejareja) - kwa hiyo hatutumii product.sell (bei ya rejareja) kama
+  // "default" kwa dropship. Badala yake, tunatafuta bei aliyokuwa akitumia
+  // mteja huyu huyu wa jumla mara ya mwisho kwa bidhaa hii hii (jina+size),
+  // ili kila mteja wa jumla aendelee na bei yake mwenyewe aliyokubaliana
+  // nayo - na faida (unitPrice - buyPrice) ihesabike kwa usahihi kwa
+  // kutumia bei halisi ya makubaliano, si bei ya rejareja.
+  const getWholesaleCustomerItemPrice = useCallback((customerId, name, size) => {
+    if (!customerId || !name) return null;
+    const nName = (name || '').trim().toLowerCase();
+    const nSize = (size || '').trim().toLowerCase();
+    const txns = wholesaleTransactions
+      .filter(t => String(t.customerId) === String(customerId) && t.type === 'goods' && t.items && t.items.length)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+    for (const t of txns) {
+      const match = t.items.find(it => (
+        (it.name || '').trim().toLowerCase() === nName &&
+        (it.size || '').trim().toLowerCase() === nSize
+      ));
+      if (match) return { unitPrice: match.unitPrice || 0, buyPrice: match.buyPrice || 0 };
+    }
+    return null;
+  }, [wholesaleTransactions]);
+
   // ---------------- Suppliers (Viwanda/Wasambazaji) ----------------
   // KINYUME cha Wholesale: hapa TUNAPOKEA mzigo kwa MKOPO kutoka kiwandani
   // (deni tunalodaiwa NA SISI), tunaurejesha kidogo kidogo. Mzigo
@@ -2171,7 +2195,7 @@ export function DataProvider({ children }) {
     wholesaleTransactions, wholesaleTransactionsLoading, totalWholesaleDebt,
     loadWholesaleCustomers, addWholesaleCustomer, updateWholesaleCustomer, deleteWholesaleCustomer,
     loadWholesaleTransactions, addWholesaleGoods, addWholesalePayment, addWholesaleOpeningBalance, deleteWholesaleTransaction,
-    getWholesaleTransactions, getWholesaleBalance, getWholesaleCustomer,
+    getWholesaleTransactions, getWholesaleBalance, getWholesaleCustomer, getWholesaleCustomerItemPrice,
     suppliers, suppliersLoading, suppliersWithSummary,
     supplierTransactions, supplierTransactionsLoading, totalSupplierDebt,
     loadSuppliers, addSupplier, updateSupplier, deleteSupplier,
