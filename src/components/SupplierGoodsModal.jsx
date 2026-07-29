@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Modal from './Modal.jsx';
 import { useData } from '../context/DataContext.jsx';
 import { PRODUCT_NAMES, PRODUCT_SIZES, PRODUCT_CATEGORIES, OTHER_VALUE } from '../utils/productConstants.js';
@@ -29,6 +29,13 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   const [locationId, setLocationId] = useState('');
   const [items, setItems] = useState([]);
   const [row, setRow] = useState(emptyRow());
+  // Inatunza bei za MWISHO zilizojazwa automatic (buy/sell), ili tuweze
+  // kutofautisha "bei ni ile ile ya automatic ya bidhaa iliyotangulia
+  // (basi tunaweza kuibadilisha salama)" dhidi ya "mtumiaji ameiandika
+  // mwenyewe kwa mkono (basi TUSIIGUSE)". Bila hii, ukibadilisha Jina/Size
+  // kwenda bidhaa nyingine baada ya bei kujaza mara ya kwanza, bei ya
+  // zamani ilikuwa ikibaki milele kwa sababu field haikuwa tupu tena.
+  const lastAutoFillRef = useRef({ buy: '', sell: '' });
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(today());
   const [err, setErr] = useState('');
@@ -58,6 +65,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
     setLocationId(presetCustomerId ? DROPSHIP_VALUE : '');
     setItems([]);
     setRow(emptyRow());
+    lastAutoFillRef.current = { buy: '', sell: '' };
     setDescription('');
     setDate(today());
     setWholesaleCustomerId(presetCustomerId || '');
@@ -126,11 +134,18 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   // imepanda/imeshuka.
   useEffect(() => {
     if (!priceHintProduct) return;
+    const autoBuy = String(priceHintProduct.buy ?? '');
+    const autoSell = String(priceHintProduct.sell ?? '');
     setRow(r => ({
       ...r,
-      buyPrice: r.buyPrice || String(priceHintProduct.buy ?? ''),
-      sellPrice: r.sellPrice || String(priceHintProduct.sell ?? ''),
+      // Jaza field TU kama ni tupu, AU kama thamani iliyopo bado ni ile
+      // ile bei ya automatic ya bidhaa iliyotangulia (yaani mtumiaji
+      // hajaigusa/kuibadilisha kwa mkono) - hii ndiyo inayoruhusu bei
+      // kubadilika ukibadilisha Jina/Size kwenda bidhaa nyingine.
+      buyPrice: (r.buyPrice === '' || r.buyPrice === lastAutoFillRef.current.buy) ? autoBuy : r.buyPrice,
+      sellPrice: (r.sellPrice === '' || r.sellPrice === lastAutoFillRef.current.sell) ? autoSell : r.sellPrice,
     }));
+    lastAutoFillRef.current = { buy: autoBuy, sell: autoSell };
   }, [priceHintProduct]);
 
   // KIPENGELE: wateja wa jumla wana BEI YAO WENYEWE, tofauti na bei ya
@@ -146,11 +161,14 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
 
   useEffect(() => {
     if (!wholesalePriceHint) return;
+    const autoBuy = String(wholesalePriceHint.buyPrice || '');
+    const autoSell = String(wholesalePriceHint.unitPrice || '');
     setRow(r => ({
       ...r,
-      buyPrice: r.buyPrice || String(wholesalePriceHint.buyPrice || ''),
-      sellPrice: r.sellPrice || String(wholesalePriceHint.unitPrice || ''),
+      buyPrice: (r.buyPrice === '' || r.buyPrice === lastAutoFillRef.current.buy) ? autoBuy : r.buyPrice,
+      sellPrice: (r.sellPrice === '' || r.sellPrice === lastAutoFillRef.current.sell) ? autoSell : r.sellPrice,
     }));
+    lastAutoFillRef.current = { buy: autoBuy, sell: autoSell };
   }, [wholesalePriceHint]);
 
   const addRowToItems = () => {
@@ -173,6 +191,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
       isNew: !matchingExisting,
     }]);
     setRow(emptyRow());
+    lastAutoFillRef.current = { buy: '', sell: '' };
   };
 
   const removeItem = (key) => setItems(prev => prev.filter(it => it.key !== key));
