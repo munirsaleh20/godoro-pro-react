@@ -89,15 +89,26 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
     )) || null;
   }, [destProducts, resolvedName, resolvedSize, row.brand]);
 
-  // KIPENGELE: bei ijitokeze automatic TU kama bidhaa hii ni ile ile KAMILI
-  // iliyopo tayari dukani (jina+size+brand vinalingana KABISA - sawa na
-  // matchingExisting juu). KWA MAKUSUDI HATUTUMII fuzzy/"karibiana" matching
-  // (findMatchingProduct) hapa tena - awali ilikuwa ikipendekeza bei kutoka
-  // bidhaa "inayofanana" kwa jina/size hata kama brand ni tofauti, jambo
-  // ambalo mtumiaji aliona si sahihi (linaweza kupendekeza bei ya bidhaa
-  // TOFAUTI kimakosa). Sasa: bila match kamili, hakuna bei ya kupendekeza -
-  // mtumiaji anaandika bei mwenyewe kwa bidhaa mpya/tofauti.
-  const priceHintProduct = matchingExisting;
+  // KIPENGELE: bei ijitokeze automatic kwa kutumia JINA+SIZE PEKEE (Brand
+  // HAIHITAJIKI kulingana) - mtumiaji ameamua hivi kwa makusudi kwa sababu
+  // Brand ni "hiari" na mara nyingi haijazwi sawasawa kila wakati (wakati
+  // mwingine tupu, wakati mwingine imejazwa) - kuilazimisha kulingana
+  // kilikuwa kinazuia bei kujaza automatic hata kwa bidhaa ile ile.
+  // KUMBUKA: hii ni TOFAUTI na matchingExisting (juu) - ile bado ni SAHIHI
+  // KAMILI (jina+size+brand) na ndiyo pekee inayoamua kama STOCK
+  // itaunganishwa (usalama dhidi ya kuchanganya bidhaa mbili tofauti);
+  // priceHintProduct hapa ni kwa ajili ya KUPENDEKEZA BEI TU, haiathiri
+  // stock/kuunganisha bidhaa yoyote.
+  const priceHintProduct = useMemo(() => {
+    if (matchingExisting) return matchingExisting;
+    if (!resolvedName) return null;
+    const nName = resolvedName.toLowerCase();
+    const nSize = (resolvedSize || '').trim().toLowerCase();
+    return destProducts.find(p => (
+      p.name.trim().toLowerCase() === nName &&
+      (p.size || '').trim().toLowerCase() === nSize
+    )) || null;
+  }, [matchingExisting, destProducts, resolvedName, resolvedSize]);
 
   // KIPENGELE: bei ijitokeze automatic - bidhaa ikishatambulika kama
   // iliyopo tayari (jina+size+brand vinalingana), tunajaza moja kwa moja
@@ -348,7 +359,9 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
               )
               : (matchingExisting
                 ? `✅ Tayari ipo kwenye stock (${matchingExisting.stock}) - idadi itaongezwa hapo, bei imejazwa automatic.`
-                : '🆕 Bidhaa mpya (jina/size/brand tofauti na iliyopo) - andika bei mwenyewe.')}
+                : (priceHintProduct
+                  ? `🆕 Bidhaa mpya (brand tofauti na iliyopo) - bei imejazwa automatic kutoka "${priceHintProduct.name}${priceHintProduct.size ? ` (${priceHintProduct.size})` : ''}", lakini itaundwa kama bidhaa mpya kwenye Inventory.`
+                  : '🆕 Bidhaa mpya - andika bei mwenyewe.'))}
           </div>
         )}
 
