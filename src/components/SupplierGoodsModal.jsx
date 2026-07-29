@@ -25,7 +25,7 @@ const emptyRow = () => ({
 //      (b) deni la mteja wa jumla kwetu (kwa bei ya kuuza) - linaonekana
 //      moja kwa moja kwenye "sheet" ya Wholesale ya mteja huyo.
 export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, presetCustomerId }) {
-  const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary, getWholesaleCustomerItemPrice } = useData();
+  const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary, getWholesaleCustomerItemPrice, findMatchingProduct } = useData();
   const [locationId, setLocationId] = useState('');
   const [items, setItems] = useState([]);
   const [row, setRow] = useState(emptyRow());
@@ -89,19 +89,31 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
     )) || null;
   }, [destProducts, resolvedName, resolvedSize, row.brand]);
 
+  // KIPENGELE: bei ijitokeze automatic hata kama "brand" haikufanana kabisa
+  // (wengi hawajazi brand kila wakati) - matchingExisting (juu) ni SAHIHI
+  // KAMILI (jina+size+brand) na ndiyo inayoamua kama stock itaunganishwa;
+  // priceHintProduct ni "karibiana" zaidi (jina+size, ikivumilia tofauti
+  // ndogo za brand/maandishi) - inatumika TU kupendekeza bei ya kuanzia,
+  // haiathiri stock/kuunganisha bidhaa yoyote.
+  const priceHintProduct = useMemo(() => {
+    if (matchingExisting) return matchingExisting;
+    if (!locationId || isDropship || !resolvedName) return null;
+    return findMatchingProduct(locationId, resolvedName, resolvedSize);
+  }, [matchingExisting, locationId, isDropship, resolvedName, resolvedSize, findMatchingProduct]);
+
   // KIPENGELE: bei ijitokeze automatic - bidhaa ikishatambulika kama
   // iliyopo tayari (jina+size+brand vinalingana), tunajaza moja kwa moja
   // bei ya ununuzi na ya kuuza za mara ya mwisho, ili mtumiaji asilazimike
   // kukumbuka/kuandika kila wakati - bado anaweza kuzibadilisha kama bei
   // imepanda/imeshuka.
   useEffect(() => {
-    if (!matchingExisting) return;
+    if (!priceHintProduct) return;
     setRow(r => ({
       ...r,
-      buyPrice: r.buyPrice || String(matchingExisting.buy ?? ''),
-      sellPrice: r.sellPrice || String(matchingExisting.sell ?? ''),
+      buyPrice: r.buyPrice || String(priceHintProduct.buy ?? ''),
+      sellPrice: r.sellPrice || String(priceHintProduct.sell ?? ''),
     }));
-  }, [matchingExisting]);
+  }, [priceHintProduct]);
 
   // KIPENGELE: wateja wa jumla wana BEI YAO WENYEWE, tofauti na bei ya
   // rejareja (product.sell) - kwa hiyo hatutafuti "matchingExisting" kwa
@@ -338,7 +350,9 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
               )
               : (matchingExisting
                 ? `✅ Tayari ipo kwenye stock (${matchingExisting.stock}) - idadi itaongezwa hapo.`
-                : '🆕 Bidhaa mpya - itaundwa kwenye Inventory ya duka hili.')}
+                : (priceHintProduct
+                  ? `🆕 Bidhaa mpya (size/brand tofauti kidogo na iliyopo) - bei imependekezwa kutoka "${priceHintProduct.name}${priceHintProduct.size ? ` (${priceHintProduct.size})` : ''}".`
+                  : '🆕 Bidhaa mpya - itaundwa kwenye Inventory ya duka hili.'))}
           </div>
         )}
 
@@ -363,7 +377,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
           <div className="form-group">
             <label className="form-label">Bei ya Kuuza (Sell) {(isDropship || !matchingExisting) && <span className="required">*</span>}</label>
             <input className="form-input" type="number" min="0" value={row.sellPrice} onChange={(e) => setRow({ ...row, sellPrice: e.target.value })}
-              placeholder={wholesalePriceHint ? `Ya awali kwa mteja huyu: ${wholesalePriceHint.unitPrice}` : matchingExisting ? `Iliyopo: ${matchingExisting.sell}` : '110000'} />
+              placeholder={wholesalePriceHint ? `Ya awali kwa mteja huyu: ${wholesalePriceHint.unitPrice}` : priceHintProduct ? `Iliyopo: ${priceHintProduct.sell}` : '110000'} />
             {isDropship && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Hii ni bei ya JUMLA kwa mteja huyu — si lazima ifanane na bei ya rejareja.</div>}
           </div>
         </div>
