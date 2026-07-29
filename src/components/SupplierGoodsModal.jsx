@@ -25,7 +25,7 @@ const emptyRow = () => ({
 //      (b) deni la mteja wa jumla kwetu (kwa bei ya kuuza) - linaonekana
 //      moja kwa moja kwenye "sheet" ya Wholesale ya mteja huyo.
 export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, presetCustomerId }) {
-  const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary, getWholesaleCustomerItemPrice, findMatchingProduct } = useData();
+  const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary, getWholesaleCustomerItemPrice } = useData();
   const [locationId, setLocationId] = useState('');
   const [items, setItems] = useState([]);
   const [row, setRow] = useState(emptyRow());
@@ -89,17 +89,15 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
     )) || null;
   }, [destProducts, resolvedName, resolvedSize, row.brand]);
 
-  // KIPENGELE: bei ijitokeze automatic hata kama "brand" haikufanana kabisa
-  // (wengi hawajazi brand kila wakati) - matchingExisting (juu) ni SAHIHI
-  // KAMILI (jina+size+brand) na ndiyo inayoamua kama stock itaunganishwa;
-  // priceHintProduct ni "karibiana" zaidi (jina+size, ikivumilia tofauti
-  // ndogo za brand/maandishi) - inatumika TU kupendekeza bei ya kuanzia,
-  // haiathiri stock/kuunganisha bidhaa yoyote.
-  const priceHintProduct = useMemo(() => {
-    if (matchingExisting) return matchingExisting;
-    if (!locationId || isDropship || !resolvedName) return null;
-    return findMatchingProduct(locationId, resolvedName, resolvedSize);
-  }, [matchingExisting, locationId, isDropship, resolvedName, resolvedSize, findMatchingProduct]);
+  // KIPENGELE: bei ijitokeze automatic TU kama bidhaa hii ni ile ile KAMILI
+  // iliyopo tayari dukani (jina+size+brand vinalingana KABISA - sawa na
+  // matchingExisting juu). KWA MAKUSUDI HATUTUMII fuzzy/"karibiana" matching
+  // (findMatchingProduct) hapa tena - awali ilikuwa ikipendekeza bei kutoka
+  // bidhaa "inayofanana" kwa jina/size hata kama brand ni tofauti, jambo
+  // ambalo mtumiaji aliona si sahihi (linaweza kupendekeza bei ya bidhaa
+  // TOFAUTI kimakosa). Sasa: bila match kamili, hakuna bei ya kupendekeza -
+  // mtumiaji anaandika bei mwenyewe kwa bidhaa mpya/tofauti.
+  const priceHintProduct = matchingExisting;
 
   // KIPENGELE: bei ijitokeze automatic - bidhaa ikishatambulika kama
   // iliyopo tayari (jina+size+brand vinalingana), tunajaza moja kwa moja
@@ -349,10 +347,8 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
                 </>
               )
               : (matchingExisting
-                ? `✅ Tayari ipo kwenye stock (${matchingExisting.stock}) - idadi itaongezwa hapo.`
-                : (priceHintProduct
-                  ? `🆕 Bidhaa mpya (size/brand tofauti kidogo na iliyopo) - bei imependekezwa kutoka "${priceHintProduct.name}${priceHintProduct.size ? ` (${priceHintProduct.size})` : ''}".`
-                  : '🆕 Bidhaa mpya - itaundwa kwenye Inventory ya duka hili.'))}
+                ? `✅ Tayari ipo kwenye stock (${matchingExisting.stock}) - idadi itaongezwa hapo, bei imejazwa automatic.`
+                : '🆕 Bidhaa mpya (jina/size/brand tofauti na iliyopo) - andika bei mwenyewe.')}
           </div>
         )}
 
