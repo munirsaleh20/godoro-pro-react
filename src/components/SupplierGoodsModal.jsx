@@ -25,7 +25,7 @@ const emptyRow = () => ({
 //      (b) deni la mteja wa jumla kwetu (kwa bei ya kuuza) - linaonekana
 //      moja kwa moja kwenye "sheet" ya Wholesale ya mteja huyo.
 export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, presetCustomerId }) {
-  const { locations, getProducts, knownBrands, wholesaleCustomersWithSummary, getWholesaleCustomerItemPrice } = useData();
+  const { locations, getProducts, products, knownBrands, wholesaleCustomersWithSummary, getWholesaleCustomerItemPrice } = useData();
   const [locationId, setLocationId] = useState('');
   const [items, setItems] = useState([]);
   const [row, setRow] = useState(emptyRow());
@@ -99,16 +99,25 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   // itaunganishwa (usalama dhidi ya kuchanganya bidhaa mbili tofauti);
   // priceHintProduct hapa ni kwa ajili ya KUPENDEKEZA BEI TU, haiathiri
   // stock/kuunganisha bidhaa yoyote.
+  //
+  // SASA inatafuta kwenye BIDHAA ZOTE (maduka/stores yote), si duka
+  // lililochaguliwa (destProducts) tu - kwa sababu mtumiaji anataka bei
+  // ijazwe automatic hata kama bidhaa hiyo (jina+size) ipo kwenye duka/
+  // store lingine tofauti na anapopeleka mzigo huu, na hata kabla ya
+  // kuchagua Duka/Store. Tunapendelea bidhaa iliyopo KWENYE duka
+  // lililochaguliwa (destProducts) ikiwepo, vinginevyo tunatumia bidhaa
+  // ya kwanza tuliyoipata popote (products yote).
   const priceHintProduct = useMemo(() => {
     if (matchingExisting) return matchingExisting;
     if (!resolvedName) return null;
     const nName = resolvedName.toLowerCase();
     const nSize = (resolvedSize || '').trim().toLowerCase();
-    return destProducts.find(p => (
+    const matches = (list) => list.find(p => (
       p.name.trim().toLowerCase() === nName &&
       (p.size || '').trim().toLowerCase() === nSize
     )) || null;
-  }, [matchingExisting, destProducts, resolvedName, resolvedSize]);
+    return matches(destProducts) || matches(products);
+  }, [matchingExisting, destProducts, products, resolvedName, resolvedSize]);
 
   // KIPENGELE: bei ijitokeze automatic - bidhaa ikishatambulika kama
   // iliyopo tayari (jina+size+brand vinalingana), tunajaza moja kwa moja
@@ -360,7 +369,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
               : (matchingExisting
                 ? `✅ Tayari ipo kwenye stock (${matchingExisting.stock}) - idadi itaongezwa hapo, bei imejazwa automatic.`
                 : (priceHintProduct
-                  ? `🆕 Bidhaa mpya (brand tofauti na iliyopo) - bei imejazwa automatic kutoka "${priceHintProduct.name}${priceHintProduct.size ? ` (${priceHintProduct.size})` : ''}", lakini itaundwa kama bidhaa mpya kwenye Inventory.`
+                  ? `🆕 Bidhaa mpya kwenye duka/store hili - bei imejazwa automatic kutoka "${priceHintProduct.name}${priceHintProduct.size ? ` (${priceHintProduct.size})` : ''}"${destProducts.includes(priceHintProduct) ? '' : ' (bei kutoka duka/store lingine ambako bidhaa hii ipo)'}, lakini itaundwa kama bidhaa mpya kwenye Inventory ya duka hili.`
                   : '🆕 Bidhaa mpya - andika bei mwenyewe.'))}
           </div>
         )}
