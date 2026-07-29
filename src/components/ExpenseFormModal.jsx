@@ -3,10 +3,11 @@ import Modal from './Modal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { today } from '../utils/format.js';
 
-const CATEGORIES = ['Rent', 'Salary', 'Utilities', 'Supplies', 'Maintenance', 'Other'];
+const CATEGORIES = ['Rent', 'Salary', 'Utilities', 'Supplies', 'Maintenance'];
+const OTHER_VALUE = '__other__';
 
 const emptyForm = (locationId = '') => ({
-  locationId, date: today(), cat: 'Rent', desc: '', amount: '', to: '',
+  locationId, date: today(), cat: 'Rent', catOther: '', desc: '', amount: '', to: '',
 });
 
 // mode: 'add' | 'edit'
@@ -20,9 +21,12 @@ export default function ExpenseFormModal({ open, mode, initial, locationOptions,
     if (!open) return;
     setErr('');
     if (mode === 'edit' && initial) {
+      const knownCat = CATEGORIES.includes(initial.cat);
       setForm({
         locationId: initial.locationId, date: initial.date || today(),
-        cat: initial.cat || 'Rent', desc: initial.desc || '',
+        cat: knownCat ? (initial.cat || 'Rent') : OTHER_VALUE,
+        catOther: knownCat ? '' : (initial.cat || ''),
+        desc: initial.desc || '',
         amount: initial.amount || '', to: initial.to || '',
       });
     } else {
@@ -30,17 +34,20 @@ export default function ExpenseFormModal({ open, mode, initial, locationOptions,
     }
   }, [open, mode, initial, locationOptions, lockedLocationId]);
 
+  const resolvedCat = form.cat === OTHER_VALUE ? form.catOther.trim() : form.cat;
+
   const handleSave = async () => {
     setErr('');
     if (!form.locationId) { setErr('Please select a location'); return; }
     if (!form.date) { setErr('Please select a date'); return; }
+    if (form.cat === OTHER_VALUE && !resolvedCat) { setErr('Please type the category'); return; }
     if (!form.desc.trim()) { setErr('Please enter a description'); return; }
     const amountNum = parseFloat(form.amount) || 0;
     if (!amountNum || amountNum <= 0) { setErr('Please enter a valid amount'); return; }
 
     setSaving(true);
     try {
-      await onSubmit({ ...form, amount: amountNum, desc: form.desc.trim(), to: form.to.trim() });
+      await onSubmit({ ...form, cat: resolvedCat, amount: amountNum, desc: form.desc.trim(), to: form.to.trim() });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -73,7 +80,12 @@ export default function ExpenseFormModal({ open, mode, initial, locationOptions,
         <label className="form-label">Category <span className="required">*</span></label>
         <select className="form-select" value={form.cat} onChange={(e) => setForm({ ...form, cat: e.target.value })}>
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          <option value={OTHER_VALUE}>Other (type your own)</option>
         </select>
+        {form.cat === OTHER_VALUE && (
+          <input className="form-input" style={{ marginTop: 8 }} placeholder="Type category..."
+            value={form.catOther} onChange={(e) => setForm({ ...form, catOther: e.target.value })} />
+        )}
       </div>
 
       <div className="form-group">
