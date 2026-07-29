@@ -134,6 +134,13 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   // kukumbuka/kuandika kila wakati - bado anaweza kuzibadilisha kama bei
   // imepanda/imeshuka.
   useEffect(() => {
+    // MUHIMU: soma thamani ya SASA ya ref KABLA ya kuibadilisha - kazi ya
+    // ndani ya setRow() HAIENDESHWI papo hapo (inaendeshwa baadaye na
+    // React), kwa hiyo kama tungeisoma ref MOJA KWA MOJA ndani ya
+    // setRow(), ingekuwa tayari imeshabadilishwa kuwa thamani MPYA kwa
+    // wakati huo - kulinganisha kusikofanana KAMWE. Hii ndiyo iliyokuwa
+    // ikisababisha bei kutobadilika/kutofuta kamwe.
+    const prevAuto = lastAutoFillRef.current;
     if (!priceHintProduct) {
       // Hakuna bei ya kupendekeza kwa mchanganyiko huu wa Jina+Size - futa
       // bei za KALE (za bidhaa iliyotangulia) IKIWA tu zilikuwa za automatic
@@ -141,8 +148,8 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
       // isiyohusiana na bidhaa aliyochagua sasa.
       setRow(r => ({
         ...r,
-        buyPrice: r.buyPrice === lastAutoFillRef.current.buy ? '' : r.buyPrice,
-        sellPrice: r.sellPrice === lastAutoFillRef.current.sell ? '' : r.sellPrice,
+        buyPrice: r.buyPrice === prevAuto.buy ? '' : r.buyPrice,
+        sellPrice: r.sellPrice === prevAuto.sell ? '' : r.sellPrice,
       }));
       lastAutoFillRef.current = { buy: '', sell: '' };
       return;
@@ -155,8 +162,8 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
       // ile bei ya automatic ya bidhaa iliyotangulia (yaani mtumiaji
       // hajaigusa/kuibadilisha kwa mkono) - hii ndiyo inayoruhusu bei
       // kubadilika ukibadilisha Jina/Size kwenda bidhaa nyingine.
-      buyPrice: (r.buyPrice === '' || r.buyPrice === lastAutoFillRef.current.buy) ? autoBuy : r.buyPrice,
-      sellPrice: (r.sellPrice === '' || r.sellPrice === lastAutoFillRef.current.sell) ? autoSell : r.sellPrice,
+      buyPrice: (r.buyPrice === '' || r.buyPrice === prevAuto.buy) ? autoBuy : r.buyPrice,
+      sellPrice: (r.sellPrice === '' || r.sellPrice === prevAuto.sell) ? autoSell : r.sellPrice,
     }));
     lastAutoFillRef.current = { buy: autoBuy, sell: autoSell };
   }, [priceHintProduct]);
@@ -173,11 +180,12 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   }, [isDropship, wholesaleCustomerId, resolvedName, resolvedSize, getWholesaleCustomerItemPrice]);
 
   useEffect(() => {
+    const prevAuto = lastAutoFillRef.current;
     if (!wholesalePriceHint) {
       setRow(r => ({
         ...r,
-        buyPrice: r.buyPrice === lastAutoFillRef.current.buy ? '' : r.buyPrice,
-        sellPrice: r.sellPrice === lastAutoFillRef.current.sell ? '' : r.sellPrice,
+        buyPrice: r.buyPrice === prevAuto.buy ? '' : r.buyPrice,
+        sellPrice: r.sellPrice === prevAuto.sell ? '' : r.sellPrice,
       }));
       lastAutoFillRef.current = { buy: '', sell: '' };
       return;
@@ -186,8 +194,8 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
     const autoSell = String(wholesalePriceHint.unitPrice || '');
     setRow(r => ({
       ...r,
-      buyPrice: (r.buyPrice === '' || r.buyPrice === lastAutoFillRef.current.buy) ? autoBuy : r.buyPrice,
-      sellPrice: (r.sellPrice === '' || r.sellPrice === lastAutoFillRef.current.sell) ? autoSell : r.sellPrice,
+      buyPrice: (r.buyPrice === '' || r.buyPrice === prevAuto.buy) ? autoBuy : r.buyPrice,
+      sellPrice: (r.sellPrice === '' || r.sellPrice === prevAuto.sell) ? autoSell : r.sellPrice,
     }));
     lastAutoFillRef.current = { buy: autoBuy, sell: autoSell };
   }, [wholesalePriceHint]);
