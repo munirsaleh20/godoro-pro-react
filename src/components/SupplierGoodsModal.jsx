@@ -116,6 +116,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   // lililochaguliwa (destProducts) ikiwepo, vinginevyo tunatumia bidhaa
   // ya kwanza tuliyoipata popote (products yote).
   const priceHintProduct = useMemo(() => {
+    if (isDropship) return null; // Dropship ina utaratibu wake wa bei (wholesalePriceHint) - usigongane nayo
     if (matchingExisting) return matchingExisting;
     if (!resolvedName) return null;
     const nName = resolvedName.toLowerCase();
@@ -125,7 +126,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
       (p.size || '').trim().toLowerCase() === nSize
     )) || null;
     return matches(destProducts) || matches(products);
-  }, [matchingExisting, destProducts, products, resolvedName, resolvedSize]);
+  }, [isDropship, matchingExisting, destProducts, products, resolvedName, resolvedSize]);
 
   // KIPENGELE: bei ijitokeze automatic - bidhaa ikishatambulika kama
   // iliyopo tayari (jina+size+brand vinalingana), tunajaza moja kwa moja
@@ -133,7 +134,19 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   // kukumbuka/kuandika kila wakati - bado anaweza kuzibadilisha kama bei
   // imepanda/imeshuka.
   useEffect(() => {
-    if (!priceHintProduct) return;
+    if (!priceHintProduct) {
+      // Hakuna bei ya kupendekeza kwa mchanganyiko huu wa Jina+Size - futa
+      // bei za KALE (za bidhaa iliyotangulia) IKIWA tu zilikuwa za automatic
+      // (mtumiaji hakuziandika mwenyewe), ili zisibaki zikionyesha bei
+      // isiyohusiana na bidhaa aliyochagua sasa.
+      setRow(r => ({
+        ...r,
+        buyPrice: r.buyPrice === lastAutoFillRef.current.buy ? '' : r.buyPrice,
+        sellPrice: r.sellPrice === lastAutoFillRef.current.sell ? '' : r.sellPrice,
+      }));
+      lastAutoFillRef.current = { buy: '', sell: '' };
+      return;
+    }
     const autoBuy = String(priceHintProduct.buy ?? '');
     const autoSell = String(priceHintProduct.sell ?? '');
     setRow(r => ({
@@ -160,7 +173,15 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   }, [isDropship, wholesaleCustomerId, resolvedName, resolvedSize, getWholesaleCustomerItemPrice]);
 
   useEffect(() => {
-    if (!wholesalePriceHint) return;
+    if (!wholesalePriceHint) {
+      setRow(r => ({
+        ...r,
+        buyPrice: r.buyPrice === lastAutoFillRef.current.buy ? '' : r.buyPrice,
+        sellPrice: r.sellPrice === lastAutoFillRef.current.sell ? '' : r.sellPrice,
+      }));
+      lastAutoFillRef.current = { buy: '', sell: '' };
+      return;
+    }
     const autoBuy = String(wholesalePriceHint.buyPrice || '');
     const autoSell = String(wholesalePriceHint.unitPrice || '');
     setRow(r => ({
