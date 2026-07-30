@@ -29,13 +29,13 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   const [locationId, setLocationId] = useState('');
   const [items, setItems] = useState([]);
   const [row, setRow] = useState(emptyRow());
-  // Inatunza bei za MWISHO zilizojazwa automatic (buy/sell), ili tuweze
-  // kutofautisha "bei ni ile ile ya automatic ya bidhaa iliyotangulia
-  // (basi tunaweza kuibadilisha salama)" dhidi ya "mtumiaji ameiandika
-  // mwenyewe kwa mkono (basi TUSIIGUSE)". Bila hii, ukibadilisha Jina/Size
-  // kwenda bidhaa nyingine baada ya bei kujaza mara ya kwanza, bei ya
-  // zamani ilikuwa ikibaki milele kwa sababu field haikuwa tupu tena.
-  const lastAutoFillRef = useRef({ buy: '', sell: '' });
+  // Inatunza bei ya MWISHO iliyojazwa automatic - moja kwa BUY, moja kwa
+  // SELL - kwa sababu sasa zina vyanzo tofauti (buy ni ile ile kila wakati,
+  // sell inategemea unamuuzia nani). Zinatuwezesha kutofautisha "bei ni ile
+  // ile ya automatic ya bidhaa iliyotangulia (tunaweza kuibadilisha salama)"
+  // dhidi ya "mtumiaji ameiandika mwenyewe kwa mkono (TUSIIGUSE)".
+  const lastAutoBuyRef = useRef('');
+  const lastAutoSellRef = useRef('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(today());
   const [err, setErr] = useState('');
@@ -65,7 +65,8 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
     setLocationId(presetCustomerId ? DROPSHIP_VALUE : '');
     setItems([]);
     setRow(emptyRow());
-    lastAutoFillRef.current = { buy: '', sell: '' };
+    lastAutoBuyRef.current = '';
+    lastAutoSellRef.current = '';
     setDescription('');
     setDate(today());
     setWholesaleCustomerId(presetCustomerId || '');
@@ -116,7 +117,6 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
   // lililochaguliwa (destProducts) ikiwepo, vinginevyo tunatumia bidhaa
   // ya kwanza tuliyoipata popote (products yote).
   const priceHintProduct = useMemo(() => {
-    if (isDropship) return null; // Dropship ina utaratibu wake wa bei (wholesalePriceHint) - usigongane nayo
     if (matchingExisting) return matchingExisting;
     if (!resolvedName) return null;
     const nName = resolvedName.toLowerCase();
@@ -126,79 +126,60 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
       (p.size || '').trim().toLowerCase() === nSize
     )) || null;
     return matches(destProducts) || matches(products);
-  }, [isDropship, matchingExisting, destProducts, products, resolvedName, resolvedSize]);
+  }, [matchingExisting, destProducts, products, resolvedName, resolvedSize]);
 
-  // KIPENGELE: bei ijitokeze automatic - bidhaa ikishatambulika kama
-  // iliyopo tayari (jina+size+brand vinalingana), tunajaza moja kwa moja
-  // bei ya ununuzi na ya kuuza za mara ya mwisho, ili mtumiaji asilazimike
-  // kukumbuka/kuandika kila wakati - bado anaweza kuzibadilisha kama bei
-  // imepanda/imeshuka.
+  // KIPENGELE: BEI YA UNUNUZI (Buy) - inajaza automatic KILA WAKATI kutoka
+  // bidhaa iliyopo tayari (jina+size, duka lolote), IWE ni mzigo wa kawaida
+  // (kwenda duka/store) AU Dropship (kwenda mteja wa jumla moja kwa moja) -
+  // kwa sababu bei uliyonunua bidhaa kwa supplier ni ile ile bila kujali
+  // unamuuzia nani. Hii ni TOFAUTI na Bei ya Kuuza (Sell) - ile inategemea
+  // ANAYENUNUA (duka = bei ya rejareja, mteja wa jumla = bei yake maalum),
+  // kwa hiyo ina chanzo chake tofauti hapa chini.
   useEffect(() => {
     // MUHIMU: soma thamani ya SASA ya ref KABLA ya kuibadilisha - kazi ya
     // ndani ya setRow() HAIENDESHWI papo hapo (inaendeshwa baadaye na
     // React), kwa hiyo kama tungeisoma ref MOJA KWA MOJA ndani ya
     // setRow(), ingekuwa tayari imeshabadilishwa kuwa thamani MPYA kwa
-    // wakati huo - kulinganisha kusikofanana KAMWE. Hii ndiyo iliyokuwa
-    // ikisababisha bei kutobadilika/kutofuta kamwe.
-    const prevAuto = lastAutoFillRef.current;
-    if (!priceHintProduct) {
-      // Hakuna bei ya kupendekeza kwa mchanganyiko huu wa Jina+Size - futa
-      // bei za KALE (za bidhaa iliyotangulia) IKIWA tu zilikuwa za automatic
-      // (mtumiaji hakuziandika mwenyewe), ili zisibaki zikionyesha bei
-      // isiyohusiana na bidhaa aliyochagua sasa.
-      setRow(r => ({
-        ...r,
-        buyPrice: r.buyPrice === prevAuto.buy ? '' : r.buyPrice,
-        sellPrice: r.sellPrice === prevAuto.sell ? '' : r.sellPrice,
-      }));
-      lastAutoFillRef.current = { buy: '', sell: '' };
-      return;
-    }
-    const autoBuy = String(priceHintProduct.buy ?? '');
-    const autoSell = String(priceHintProduct.sell ?? '');
+    // wakati huo - kulinganisha kusikofanana KAMWE.
+    const prevAuto = lastAutoBuyRef.current;
+    const autoBuy = priceHintProduct ? String(priceHintProduct.buy ?? '') : '';
     setRow(r => ({
       ...r,
       // Jaza field TU kama ni tupu, AU kama thamani iliyopo bado ni ile
       // ile bei ya automatic ya bidhaa iliyotangulia (yaani mtumiaji
-      // hajaigusa/kuibadilisha kwa mkono) - hii ndiyo inayoruhusu bei
-      // kubadilika ukibadilisha Jina/Size kwenda bidhaa nyingine.
-      buyPrice: (r.buyPrice === '' || r.buyPrice === prevAuto.buy) ? autoBuy : r.buyPrice,
-      sellPrice: (r.sellPrice === '' || r.sellPrice === prevAuto.sell) ? autoSell : r.sellPrice,
+      // hajaigusa/kuibadilisha kwa mkono).
+      buyPrice: (r.buyPrice === '' || r.buyPrice === prevAuto) ? autoBuy : r.buyPrice,
     }));
-    lastAutoFillRef.current = { buy: autoBuy, sell: autoSell };
+    lastAutoBuyRef.current = autoBuy;
   }, [priceHintProduct]);
 
-  // KIPENGELE: wateja wa jumla wana BEI YAO WENYEWE, tofauti na bei ya
-  // rejareja (product.sell) - kwa hiyo hatutafuti "matchingExisting" kwa
-  // dropship (haina maana, mzigo hauendi kwenye stock yetu). Badala yake,
-  // tunatafuta bei aliyokuwa akitozwa mteja huyu huyu wa jumla mara ya
-  // mwisho kwa bidhaa hii hii, ili bei/na faida vibaki sahihi kwa mteja
-  // huyo maalum badala ya kutumia bei ya rejareja kimakosa.
+  // KIPENGELE: BEI YA KUUZA (Sell) - chanzo chake ni TOFAUTI kulingana na
+  // mzigo unaenda wapi:
+  //  - Duka/Store ya kawaida: bei ya rejareja iliyopo tayari (priceHintProduct.sell)
+  //  - Dropship (mteja wa jumla): bei aliyokuwa akitozwa MTEJA HUYU HUYU
+  //    mara ya mwisho (wholesalePriceHint.unitPrice) - SIYO bei ya
+  //    rejareja, kwa sababu wateja wa jumla wana bei yao wenyewe.
   const wholesalePriceHint = useMemo(() => {
-    if (!isDropship || !wholesaleCustomerId || wholesaleCustomerId === NEW_CUSTOMER_VALUE || !resolvedName) return null;
-    return getWholesaleCustomerItemPrice(wholesaleCustomerId, resolvedName, resolvedSize);
+    if (!isDropship || !wholesaleCustomerId || !resolvedName) return null;
+    // Mteja mpya kabisa (bado hajaundwa) hana historia yake mwenyewe kwa
+    // ufafanuzi - tumpitishie null moja kwa moja ili aende papo hapo kwenye
+    // kutafuta bei ya WATEJA WENGINE wa jumla (badala ya kutafuta kwa ID
+    // isiyokuwepo).
+    const idForLookup = wholesaleCustomerId === NEW_CUSTOMER_VALUE ? null : wholesaleCustomerId;
+    return getWholesaleCustomerItemPrice(idForLookup, resolvedName, resolvedSize);
   }, [isDropship, wholesaleCustomerId, resolvedName, resolvedSize, getWholesaleCustomerItemPrice]);
 
   useEffect(() => {
-    const prevAuto = lastAutoFillRef.current;
-    if (!wholesalePriceHint) {
-      setRow(r => ({
-        ...r,
-        buyPrice: r.buyPrice === prevAuto.buy ? '' : r.buyPrice,
-        sellPrice: r.sellPrice === prevAuto.sell ? '' : r.sellPrice,
-      }));
-      lastAutoFillRef.current = { buy: '', sell: '' };
-      return;
-    }
-    const autoBuy = String(wholesalePriceHint.buyPrice || '');
-    const autoSell = String(wholesalePriceHint.unitPrice || '');
+    const prevAuto = lastAutoSellRef.current;
+    const autoSell = isDropship
+      ? (wholesalePriceHint ? String(wholesalePriceHint.unitPrice || '') : '')
+      : (priceHintProduct ? String(priceHintProduct.sell ?? '') : '');
     setRow(r => ({
       ...r,
-      buyPrice: (r.buyPrice === '' || r.buyPrice === prevAuto.buy) ? autoBuy : r.buyPrice,
-      sellPrice: (r.sellPrice === '' || r.sellPrice === prevAuto.sell) ? autoSell : r.sellPrice,
+      sellPrice: (r.sellPrice === '' || r.sellPrice === prevAuto) ? autoSell : r.sellPrice,
     }));
-    lastAutoFillRef.current = { buy: autoBuy, sell: autoSell };
-  }, [wholesalePriceHint]);
+    lastAutoSellRef.current = autoSell;
+  }, [isDropship, priceHintProduct, wholesalePriceHint]);
 
   const addRowToItems = () => {
     setErr('');
@@ -220,7 +201,8 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
       isNew: !matchingExisting,
     }]);
     setRow(emptyRow());
-    lastAutoFillRef.current = { buy: '', sell: '' };
+    lastAutoBuyRef.current = '';
+    lastAutoSellRef.current = '';
   };
 
   const removeItem = (key) => setItems(prev => prev.filter(it => it.key !== key));
@@ -407,9 +389,16 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
               ? (
                 <>
                   🚚 Bidhaa hii itaenda moja kwa moja kwa mteja wa jumla - haitaingia kwenye Inventory ya duka letu.
+                  {priceHintProduct && (
+                    <div style={{ marginTop: 4, color: '#0369a1' }}>
+                      💡 Bei ya Ununuzi (Buy) imejazwa automatic <strong>{fmtS(priceHintProduct.buy)}</strong> kutoka bidhaa hii hii iliyopo kwenye stock. Bei ya Kuuza (Sell) SI kutoka hapa - ni bei maalum ya mteja huyu (chini).
+                    </div>
+                  )}
                   {wholesalePriceHint && (
                     <div style={{ marginTop: 4, color: '#0369a1' }}>
-                      💡 Mteja huyu alikuwa akitozwa <strong>{fmtS(wholesalePriceHint.unitPrice)}</strong> kwa bidhaa hii mara ya mwisho (bei ya jumla — tofauti na bei ya rejareja). Tumejaza moja kwa moja, unaweza kubadilisha.
+                      {wholesalePriceHint.fromOtherCustomer
+                        ? <>💡 Mteja huyu hajawahi kuuziwa bidhaa hii. Tumejaza bei ya <strong>{fmtS(wholesalePriceHint.unitPrice)}</strong> aliyowahi kutozwa mteja mwingine wa jumla ({wholesalePriceHint.otherCustomerName || 'asiyejulikana'}) kwa bidhaa hii hii (bei ya jumla — tofauti na bei ya rejareja). Unaweza kubadilisha.</>
+                        : <>💡 Mteja huyu alikuwa akitozwa <strong>{fmtS(wholesalePriceHint.unitPrice)}</strong> kwa bidhaa hii mara ya mwisho (bei ya jumla — tofauti na bei ya rejareja). Tumejaza moja kwa moja, unaweza kubadilisha.</>}
                     </div>
                   )}
                 </>
@@ -443,7 +432,7 @@ export default function SupplierGoodsModal({ open, supplier, onClose, onSubmit, 
           <div className="form-group">
             <label className="form-label">Bei ya Kuuza (Sell) {(isDropship || !matchingExisting) && <span className="required">*</span>}</label>
             <input className="form-input" type="number" min="0" value={row.sellPrice} onChange={(e) => setRow({ ...row, sellPrice: e.target.value })}
-              placeholder={wholesalePriceHint ? `Ya awali kwa mteja huyu: ${wholesalePriceHint.unitPrice}` : priceHintProduct ? `Iliyopo: ${priceHintProduct.sell}` : '110000'} />
+              placeholder={wholesalePriceHint ? `Ya awali kwa mteja huyu: ${wholesalePriceHint.unitPrice}` : (!isDropship && priceHintProduct) ? `Iliyopo: ${priceHintProduct.sell}` : '110000'} />
             {isDropship && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Hii ni bei ya JUMLA kwa mteja huyu — si lazima ifanane na bei ya rejareja.</div>}
           </div>
         </div>

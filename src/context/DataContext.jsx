@@ -224,11 +224,12 @@ export function DataProvider({ children }) {
   // ajili ya Muhtasari wa Kila Siku (Daily Inventory Summary). Thamani
   // (total_value) inahesabiwa AUTOMATIC = qty x unitPrice, hivyo mtumiaji
   // haitaji kukokotoa mwenyewe.
-  const logInventoryAddition = useCallback(async ({ locationId, productId, name, size, brand, qty, unitPrice, isNewProduct }) => {
+  const logInventoryAddition = useCallback(async ({ locationId, productId, name, size, brand, qty, unitPrice, buyPrice, source, isNewProduct }) => {
     const totalValue = (qty || 0) * (unitPrice || 0);
     const { data, error } = await sb.from('inventory_logs').insert({
       location_id: locationId, product_id: productId, product_name: name,
       size: size || null, brand: brand || null, qty, unit_price: unitPrice,
+      buy_price: buyPrice ?? null, source: source || null,
       total_value: totalValue, is_new_product: !!isNewProduct,
     }).select().single();
     // FIX: awali makosa hapa yalikuwa yakimezwa kimya kimya (console.error
@@ -244,7 +245,8 @@ export function DataProvider({ children }) {
     const log = {
       id: data.id, locationId: data.location_id, productId: data.product_id,
       name: data.product_name, size: data.size || '', brand: data.brand || '',
-      qty: data.qty || 0, unitPrice: data.unit_price || 0, totalValue: data.total_value || 0,
+      qty: data.qty || 0, unitPrice: data.unit_price || 0, buyPrice: data.buy_price || 0,
+      source: data.source || '', totalValue: data.total_value || 0,
       isNewProduct: data.is_new_product, date: (data.created_at || '').split('T')[0],
       createdAt: data.created_at,
     };
@@ -262,7 +264,7 @@ export function DataProvider({ children }) {
   // inakuwa 5 lakini Summary inaonyesha 3 tu. Sasa: ikiwa Edit inaongeza
   // stock (newStock > stock ya awali), ongezeko (delta) linalogiwa kama
   // "restock" ile ile, ili Muhtasari uwe sahihi bila kujali njia iliyotumika.
-  const updateProduct = useCallback(async (id, { name, size, brand, buy, sell, stock, cat }) => {
+  const updateProduct = useCallback(async (id, { name, size, brand, buy, sell, stock, cat }, source = null) => {
     const prevProduct = products.find(p => String(p.id) === String(id));
     const prevStock = prevProduct ? (prevProduct.stock || 0) : 0;
     const newStock = parseInt(stock, 10) || 0;
@@ -278,7 +280,7 @@ export function DataProvider({ children }) {
       try {
         await logInventoryAddition({
           locationId: prevProduct.locationId, productId: id, name, size, brand,
-          qty: newStock - prevStock, unitPrice: sell, isNewProduct: false,
+          qty: newStock - prevStock, unitPrice: sell, buyPrice: buy, source, isNewProduct: false,
         });
       } catch (logErr) {
         console.error('Stock updated but log failed:', logErr.message);
@@ -320,7 +322,7 @@ export function DataProvider({ children }) {
   // iliyoingizwa. Thamani ya mzigo uliongezwa (qty x bei) inahesabiwa
   // AUTOMATIC na kurekodiwa kwenye inventory_logs - hata kama umeongeza
   // bidhaa hiyo zaidi ya mara moja.
-  const addProduct = useCallback(async ({ locationId, name, size, brand, buy, sell, stock, cat }, batchOverride = null) => {
+  const addProduct = useCallback(async ({ locationId, name, size, brand, buy, sell, stock, cat }, batchOverride = null, source = null) => {
     // `batchOverride`: inatumika na bulkAddProducts pekee - inapotolewa,
     // inachukua nafasi ya kutafuta kwenye `products` state (ambayo bado
     // haijasasishwa/re-render kati ya rows za bulk add hiyo hiyo).
@@ -338,7 +340,7 @@ export function DataProvider({ children }) {
       try {
         await logInventoryAddition({
           locationId, productId: existing.id, name: merged.name, size: merged.size, brand: merged.brand,
-          qty: parseInt(stock, 10) || 0, unitPrice: sell, isNewProduct: false,
+          qty: parseInt(stock, 10) || 0, unitPrice: sell, buyPrice: buy, source, isNewProduct: false,
         });
       } catch (logErr) {
         console.error('Restock saved but log failed:', logErr.message);
@@ -362,7 +364,7 @@ export function DataProvider({ children }) {
     try {
       await logInventoryAddition({
         locationId, productId: product.id, name: product.name, size: product.size, brand: product.brand,
-        qty: product.stock, unitPrice: product.sell, isNewProduct: true,
+        qty: product.stock, unitPrice: product.sell, buyPrice: product.buy, source, isNewProduct: true,
       });
     } catch (logErr) {
       console.error('Product saved but log failed:', logErr.message);
@@ -415,7 +417,8 @@ export function DataProvider({ children }) {
       setInventoryLogs((data || []).map(l => ({
         id: l.id, locationId: l.location_id, productId: l.product_id,
         name: l.product_name, size: l.size || '', brand: l.brand || '',
-        qty: l.qty || 0, unitPrice: l.unit_price || 0, totalValue: l.total_value || 0,
+        qty: l.qty || 0, unitPrice: l.unit_price || 0, buyPrice: l.buy_price || 0,
+        source: l.source || '', totalValue: l.total_value || 0,
         isNewProduct: l.is_new_product, date: (l.created_at || '').split('T')[0], createdAt: l.created_at,
       })));
     } catch (err) {
@@ -455,42 +458,110 @@ export function DataProvider({ children }) {
     }
   }, [inventoryLogs, products]);
 
-  // KIPENGELE: "Edit" rekodi ya inventory_logs (badilisha Qty au Unit
-  // Price ya bidhaa iliyoongezwa siku fulani) - kutoka kwenye Daily
-  // Summary. Kama Qty imebadilika, tunasasisha stock ya bidhaa husika
-  // kwa TOFAUTI (delta = newQty - oldQty) - sio kubadilisha stock nzima
-  // moja kwa moja, ili tusiathiri mauzo/marekebisho mengine yaliyotokea
-  // baada ya log hii kuandikwa. Stock haiwezi kwenda chini ya 0.
-  const updateInventoryLog = useCallback(async (id, { qty, unitPrice }) => {
+  // KIPENGELE: "Edit" KAMILI ya rekodi ya inventory_logs - Jina, Size,
+  // Brand, Bei ya Ununuzi (Buy), Bei ya Kuuza (Sell), Idadi (Qty), Chanzo
+  // (Source - mfano kiwanda gani), NA Location (duka/store mzigo
+  // unapoenda) - bila kujali kama mzigo huu uliongezwa moja kwa moja
+  // kutoka kwa Supplier au kupitia Inventory (Add/Edit/Bulk Add), kwa
+  // sababu njia zote mbili sasa zinaandika kwenye jedwali hili hili la
+  // inventory_logs.
+  //
+  // Kubadilisha LOCATION (destination) ni maalum: badala ya kubadilisha
+  // tu namba kwenye jedwali, tunahamisha STOCK halisi - stock ya
+  // AWALI (log.qty ya zamani) inarudishwa/kupunguzwa kutoka bidhaa ya
+  // LOCATION YA ZAMANI, kisha idadi MPYA inaongezwa (kuunganishwa na
+  // iliyopo au kuunda mpya) kwenye bidhaa ya LOCATION MPYA - sawa na
+  // "futa hapa, ongeza pale" - ili stock ibaki sahihi popote pale.
+  const updateInventoryLog = useCallback(async (id, { name, size, brand, qty, unitPrice, buyPrice, locationId, source }) => {
     const log = inventoryLogs.find(l => String(l.id) === String(id));
     if (!log) throw new Error('Log entry haikupatikana.');
 
     const newQty = parseInt(qty, 10) || 0;
     const newUnitPrice = parseFloat(unitPrice) || 0;
+    const newBuyPrice = (buyPrice === undefined || buyPrice === '') ? (log.buyPrice || 0) : (parseFloat(buyPrice) || 0);
+    const newName = (name !== undefined ? name : log.name || '').trim();
+    const newSize = (size !== undefined ? size : log.size) || '';
+    const newBrand = (brand !== undefined ? brand : log.brand) || '';
+    const newLocationId = locationId || log.locationId;
+    const newSource = source !== undefined ? source : (log.source || '');
     const newTotalValue = newQty * newUnitPrice;
+    if (!newName) throw new Error('Jina la bidhaa haliwezi kuwa tupu.');
+
+    const destinationChanged = String(newLocationId) !== String(log.locationId);
+    let newProductId = log.productId;
+
+    if (destinationChanged) {
+      // 1. Punguza stock ya AWALI (kiasi cha log hii) kutoka bidhaa/duka LA ZAMANI.
+      if (log.productId) {
+        const oldProduct = products.find(p => String(p.id) === String(log.productId));
+        if (oldProduct) {
+          const revertedStock = Math.max(0, (oldProduct.stock || 0) - (log.qty || 0));
+          const { error: revertErr } = await sb.from('products').update({ stock: revertedStock }).eq('id', oldProduct.id);
+          if (revertErr) throw new Error(revertErr.message);
+          setProducts(prev => prev.map(p => (String(p.id) === String(oldProduct.id) ? { ...p, stock: revertedStock } : p)));
+        }
+      }
+      // 2. Tafuta/unda bidhaa kwenye duka JIPYA, ongeza idadi MPYA huko.
+      const destExisting = findExactLocationProduct(newLocationId, newName, newSize, newBrand);
+      if (destExisting) {
+        const mergedStock = (destExisting.stock || 0) + newQty;
+        const { error: mErr } = await sb.from('products').update({
+          stock: mergedStock, buy_price: newBuyPrice, sell_price: newUnitPrice,
+        }).eq('id', destExisting.id);
+        if (mErr) throw new Error(mErr.message);
+        setProducts(prev => prev.map(p => (String(p.id) === String(destExisting.id)
+          ? { ...p, stock: mergedStock, buy: newBuyPrice, sell: newUnitPrice } : p)));
+        newProductId = destExisting.id;
+      } else {
+        const { data: created, error: cErr } = await sb.from('products').insert({
+          location_id: newLocationId, name: newName, size: newSize, brand: newBrand,
+          buy_price: newBuyPrice, sell_price: newUnitPrice, stock: newQty, category: 'Spring',
+        }).select().single();
+        if (cErr) throw new Error(cErr.message);
+        const newProd = {
+          id: created.id, locationId: created.location_id, name: created.name,
+          size: created.size || '', brand: created.brand || '', buy: created.buy_price || 0,
+          sell: created.sell_price || 0, stock: created.stock || 0, cat: created.category || 'Spring',
+        };
+        setProducts(prev => addUnique(prev, newProd, false));
+        newProductId = newProd.id;
+      }
+    } else {
+      // Duka/store haikubadilika - rekebisha stock ya bidhaa ILE ILE kwa
+      // TOFAUTI (delta = newQty - oldQty), na sasisha jina/size/brand/bei
+      // zake kama zimebadilika, bila kuathiri mauzo/marekebisho mengine.
+      const qtyDelta = newQty - (log.qty || 0);
+      if (log.productId) {
+        const product = products.find(p => String(p.id) === String(log.productId));
+        if (product) {
+          const adjustedStock = Math.max(0, (product.stock || 0) + qtyDelta);
+          const { error: pErr } = await sb.from('products').update({
+            name: newName, size: newSize, brand: newBrand,
+            buy_price: newBuyPrice, sell_price: newUnitPrice, stock: adjustedStock,
+          }).eq('id', product.id);
+          if (pErr) throw new Error(pErr.message);
+          setProducts(prev => prev.map(p => (String(p.id) === String(product.id)
+            ? { ...p, name: newName, size: newSize, brand: newBrand, buy: newBuyPrice, sell: newUnitPrice, stock: adjustedStock } : p)));
+        }
+      }
+    }
 
     const { data: updatedRows, error } = await sb.from('inventory_logs').update({
-      qty: newQty, unit_price: newUnitPrice, total_value: newTotalValue,
+      product_id: newProductId, location_id: newLocationId,
+      product_name: newName, size: newSize || null, brand: newBrand || null,
+      qty: newQty, unit_price: newUnitPrice, buy_price: newBuyPrice, source: newSource || null,
+      total_value: newTotalValue,
     }).eq('id', id).select();
     if (error) throw new Error(error.message);
     if (!updatedRows || updatedRows.length === 0) {
       throw new Error('Huna ruhusa ya ku-edit rekodi hii. Owner na Manager tu ndio wanaruhusiwa.');
     }
 
-    setInventoryLogs(prev => prev.map(l => (String(l.id) === String(id)
-      ? { ...l, qty: newQty, unitPrice: newUnitPrice, totalValue: newTotalValue } : l)));
-
-    const qtyDelta = newQty - (log.qty || 0);
-    if (qtyDelta !== 0 && log.productId) {
-      const product = products.find(p => String(p.id) === String(log.productId));
-      if (product) {
-        const newStock = Math.max((product.stock || 0) + qtyDelta, 0);
-        const { error: stockError } = await sb.from('products').update({ stock: newStock }).eq('id', product.id);
-        if (stockError) console.error('Failed to adjust stock after log edit:', stockError);
-        else setProducts(prev => prev.map(p => (String(p.id) === String(product.id) ? { ...p, stock: newStock } : p)));
-      }
-    }
-  }, [inventoryLogs, products]);
+    setInventoryLogs(prev => prev.map(l => (String(l.id) === String(id) ? {
+      ...l, productId: newProductId, locationId: newLocationId, name: newName, size: newSize, brand: newBrand,
+      qty: newQty, unitPrice: newUnitPrice, buyPrice: newBuyPrice, source: newSource, totalValue: newTotalValue,
+    } : l)));
+  }, [inventoryLogs, products, findExactLocationProduct]);
 
   // Muhtasari wa bidhaa zilizoongezwa kwa SIKU (grouped by date) - kwa kila
   // siku: idadi ya matukio, jumla ya units (qty) zilizoongezwa, na jumla ya
@@ -1759,27 +1830,47 @@ export function DataProvider({ children }) {
 
   // KIPENGELE: bei ya mteja wa jumla ni TOFAUTI na bei ya mteja wa kawaida
   // (rejareja) - kwa hiyo hatutumii product.sell (bei ya rejareja) kama
-  // "default" kwa dropship. Badala yake, tunatafuta bei aliyokuwa akitumia
-  // mteja huyu huyu wa jumla mara ya mwisho kwa bidhaa hii hii (jina+size),
-  // ili kila mteja wa jumla aendelee na bei yake mwenyewe aliyokubaliana
-  // nayo - na faida (unitPrice - buyPrice) ihesabike kwa usahihi kwa
-  // kutumia bei halisi ya makubaliano, si bei ya rejareja.
+  // "default" kwa dropship. Kwanza tunatafuta bei aliyokuwa akitumia mteja
+  // HUYU HUYU wa jumla mara ya mwisho kwa bidhaa hii hii (jina+size), ili
+  // aendelee na bei yake mwenyewe aliyokubaliana nayo. Kama mteja huyu
+  // HAJAWAHI kuuziwa bidhaa hii (hana historia), tunatafuta bei ya bidhaa
+  // hii hii kwa WATEJA WENGINE WA JUMLA (soko la jumla kwa ujumla) kama
+  // mwongozo - BADO SI bei ya rejareja, ni bei ya jumla tu, kutoka kwa
+  // mteja mwingine yeyote wa jumla aliyewahi kuuziwa bidhaa hii.
   const getWholesaleCustomerItemPrice = useCallback((customerId, name, size) => {
-    if (!customerId || !name) return null;
+    if (!name) return null;
     const nName = (name || '').trim().toLowerCase();
     const nSize = (size || '').trim().toLowerCase();
-    const txns = wholesaleTransactions
-      .filter(t => String(t.customerId) === String(customerId) && t.type === 'goods' && t.items && t.items.length)
-      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
-    for (const t of txns) {
-      const match = t.items.find(it => (
-        (it.name || '').trim().toLowerCase() === nName &&
-        (it.size || '').trim().toLowerCase() === nSize
+    const findIn = (txns) => {
+      const sorted = [...txns].sort((a, b) => (
+        (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || '')
       ));
-      if (match) return { unitPrice: match.unitPrice || 0, buyPrice: match.buyPrice || 0 };
+      for (const t of sorted) {
+        const match = t.items && t.items.find(it => (
+          (it.name || '').trim().toLowerCase() === nName &&
+          (it.size || '').trim().toLowerCase() === nSize
+        ));
+        if (match) return { unitPrice: match.unitPrice || 0, buyPrice: match.buyPrice || 0, customerId: t.customerId };
+      }
+      return null;
+    };
+
+    if (customerId) {
+      const own = findIn(wholesaleTransactions.filter(t => (
+        String(t.customerId) === String(customerId) && t.type === 'goods' && t.items && t.items.length
+      )));
+      if (own) return { unitPrice: own.unitPrice, buyPrice: own.buyPrice, fromOtherCustomer: false };
+    }
+
+    const other = findIn(wholesaleTransactions.filter(t => (
+      String(t.customerId) !== String(customerId) && t.type === 'goods' && t.items && t.items.length
+    )));
+    if (other) {
+      const cust = wholesaleCustomers.find(c => String(c.id) === String(other.customerId));
+      return { unitPrice: other.unitPrice, buyPrice: other.buyPrice, fromOtherCustomer: true, otherCustomerName: cust?.name || '' };
     }
     return null;
-  }, [wholesaleTransactions]);
+  }, [wholesaleTransactions, wholesaleCustomers]);
 
   // ---------------- Suppliers (Viwanda/Wasambazaji) ----------------
   // KINYUME cha Wholesale: hapa TUNAPOKEA mzigo kwa MKOPO kutoka kiwandani
@@ -1865,6 +1956,8 @@ export function DataProvider({ children }) {
   // kama haipo, bidhaa mpya inaundwa moja kwa moja.
   const addSupplierGoods = useCallback(async ({ supplierId, locationId, items, description, date, recordedBy }) => {
     if (!items || !items.length) throw new Error('Weka angalau bidhaa moja iliyopokelewa');
+    const supplierName = suppliers.find(s => String(s.id) === String(supplierId))?.name;
+    const source = supplierName ? `Kiwanda: ${supplierName}` : null;
 
     const resolvedItems = [];
     for (const it of items) {
@@ -1882,7 +1975,7 @@ export function DataProvider({ children }) {
           name: existing.name, size: existing.size, brand: it.brand || existing.brand,
           buy: it.buyPrice || existing.buy, sell: it.sellPrice || existing.sell,
           cat: existing.cat, stock: existing.stock + (it.quantity || 0),
-        });
+        }, source);
         resolvedItems.push({ productId: existing.id, name: existing.name, size: existing.size, quantity: it.quantity, buyPrice: it.buyPrice });
       } else {
         if (!it.sellPrice || it.sellPrice <= 0) {
@@ -1891,7 +1984,7 @@ export function DataProvider({ children }) {
         const created = await addProduct({
           locationId, name: it.name, size: it.size, brand: it.brand || '',
           buy: it.buyPrice || 0, sell: it.sellPrice, stock: it.quantity || 0, cat: it.cat || 'Spring',
-        });
+        }, null, source);
         resolvedItems.push({ productId: created.id, name: created.name, size: created.size, quantity: it.quantity, buyPrice: it.buyPrice });
       }
     }
@@ -1912,9 +2005,7 @@ export function DataProvider({ children }) {
     };
     setSupplierTransactions(prev => addUnique(prev, txn, false));
     return txn;
-  }, [findExactLocationProduct, updateProduct, addProduct]);
-
-  // Kurekodi MZIGO uliopokelewa kutoka kiwandani KWA MKOPO ambao
+  }, [findExactLocationProduct, updateProduct, addProduct, suppliers]);
   // UNAPELEKWA MOJA KWA MOJA kwa mteja wa Wholesale (DROPSHIP) - mzigo
   // HAUPITII duka/store letu lolote, hivyo HAUONGEZI stock kwenye
   // Inventory yetu popote (location_id = null humu). Deni tunalodaiwa na
@@ -2008,6 +2099,8 @@ export function DataProvider({ children }) {
     if (!txn) throw new Error('Mstari haukupatikana.');
     if (txn.type !== 'stock_in') throw new Error('Mstari huu si mzigo (stock_in) - hauwezi kuhaririwa hapa.');
 
+    const supplierName = suppliers.find(s => String(s.id) === String(txn.supplierId))?.name;
+    const source = supplierName ? `Kiwanda: ${supplierName}` : null;
     const locationId = txn.locationId; // null kwa dropship, id halisi kwa duka letu
 
     if (locationId && Array.isArray(txn.items)) {
@@ -2033,13 +2126,13 @@ export function DataProvider({ children }) {
             name: existing.name, size: existing.size, brand: it.brand || existing.brand,
             buy: it.buyPrice || existing.buy, sell: existing.sell, cat: existing.cat,
             stock: existing.stock + (it.quantity || 0),
-          });
+          }, source);
           resolvedItems.push({ productId: existing.id, name: existing.name, size: existing.size, quantity: it.quantity, buyPrice: it.buyPrice });
         } else {
           const created = await addProduct({
             locationId, name: it.name, size: it.size, brand: it.brand || '',
             buy: it.buyPrice || 0, sell: it.buyPrice || 0, stock: it.quantity || 0, cat: it.cat || 'Spring',
-          });
+          }, null, source);
           resolvedItems.push({ productId: created.id, name: created.name, size: created.size, quantity: it.quantity, buyPrice: it.buyPrice });
         }
       }
@@ -2064,7 +2157,7 @@ export function DataProvider({ children }) {
     };
     setSupplierTransactions(prev => prev.map(t => (String(t.id) === String(id) ? updated : t)));
     return updated;
-  }, [supplierTransactions, products, updateProduct, findExactLocationProduct, addProduct]);
+  }, [supplierTransactions, products, updateProduct, findExactLocationProduct, addProduct, suppliers]);
 
   const deleteSupplierTransaction = useCallback(async (id) => {
     // NOTE: kufuta mstari wa "stock_in" HAKURUDISHI stock iliyokwisha

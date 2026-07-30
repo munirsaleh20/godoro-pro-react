@@ -25,7 +25,9 @@ export default function Inventory() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [editingLogId, setEditingLogId] = useState(null);
-  const [logEditForm, setLogEditForm] = useState({ qty: '', unitPrice: '' });
+  const [logEditForm, setLogEditForm] = useState({
+    name: '', size: '', brand: '', qty: '', unitPrice: '', buyPrice: '', locationId: '', source: '',
+  });
   const [page, setPage] = useState(1);
 
   useEffect(() => { setPage(1); }, [filter, search]);
@@ -170,19 +172,32 @@ export default function Inventory() {
 
   const startEditLog = (log) => {
     setEditingLogId(log.id);
-    setLogEditForm({ qty: String(log.qty || 0), unitPrice: String(log.unitPrice || 0) });
+    setLogEditForm({
+      name: log.name || '', size: log.size || '', brand: log.brand || '',
+      qty: String(log.qty || 0), unitPrice: String(log.unitPrice || 0),
+      buyPrice: String(log.buyPrice || 0), locationId: String(log.locationId || ''),
+      source: log.source || '',
+    });
   };
   const cancelEditLog = () => {
     setEditingLogId(null);
-    setLogEditForm({ qty: '', unitPrice: '' });
+    setLogEditForm({ name: '', size: '', brand: '', qty: '', unitPrice: '', buyPrice: '', locationId: '', source: '' });
   };
   const saveEditLog = async (log) => {
     const qtyNum = parseInt(logEditForm.qty, 10);
     const priceNum = parseFloat(logEditForm.unitPrice);
+    const buyNum = parseFloat(logEditForm.buyPrice);
+    if (!logEditForm.name.trim()) { showToast('Weka Jina la bidhaa', 'error'); return; }
+    if (!logEditForm.locationId) { showToast('Chagua Location', 'error'); return; }
     if (Number.isNaN(qtyNum) || qtyNum < 0) { showToast('Weka Qty sahihi', 'error'); return; }
-    if (Number.isNaN(priceNum) || priceNum < 0) { showToast('Weka Unit Price sahihi', 'error'); return; }
+    if (Number.isNaN(priceNum) || priceNum < 0) { showToast('Weka Sell Price sahihi', 'error'); return; }
+    if (owner && (Number.isNaN(buyNum) || buyNum < 0)) { showToast('Weka Buy Price sahihi', 'error'); return; }
     try {
-      await updateInventoryLog(log.id, { qty: qtyNum, unitPrice: priceNum });
+      await updateInventoryLog(log.id, {
+        name: logEditForm.name.trim(), size: logEditForm.size.trim(), brand: logEditForm.brand.trim(),
+        qty: qtyNum, unitPrice: priceNum, buyPrice: owner ? buyNum : undefined,
+        locationId: logEditForm.locationId, source: logEditForm.source.trim(),
+      });
       showToast('✅ Log entry updated — stock imesasishwa');
       cancelEditLog();
     } catch (err) {
@@ -273,41 +288,66 @@ export default function Inventory() {
                                   <th style={{ padding: 6 }}>Size</th>
                                   <th style={{ padding: 6 }}>Brand</th>
                                   <th style={{ padding: 6 }}>Location</th>
-                                  <th style={{ padding: 6 }}>Type</th>
+                                  {owner && <th style={{ padding: 6 }}>Buy Price</th>}
+                                  <th style={{ padding: 6 }}>Sell Price</th>
                                   <th style={{ padding: 6 }}>Qty</th>
-                                  <th style={{ padding: 6 }}>Unit Price</th>
                                   <th style={{ padding: 6 }}>Value</th>
+                                  <th style={{ padding: 6 }}>Source (Chanzo)</th>
+                                  <th style={{ padding: 6 }}>Type</th>
                                   {canManage && <th style={{ padding: 6 }}>Action</th>}
                                 </tr>
                               </thead>
                               <tbody>
                                 {dayLogs.length === 0 ? (
-                                  <tr><td colSpan={9} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
+                                  <tr><td colSpan={9 + (owner ? 1 : 0) + (canManage ? 1 : 0)} style={{ padding: '8px 8px 8px 28px', color: '#94a3b8' }}>No entries</td></tr>
                                 ) : dayLogs.map(l => {
                                   const loc = locations.find(x => String(x.id) === String(l.locationId));
                                   const isEditing = editingLogId === l.id;
                                   return (
                                     <tr key={l.id} style={{ borderTop: '1px solid #e2e8f0' }}>
-                                      <td style={{ padding: '6px 8px 6px 28px', fontWeight: 600 }}>{l.name}</td>
-                                      <td style={{ padding: 6 }}>{l.size || 'N/A'}</td>
-                                      <td style={{ padding: 6 }}>{l.brand || 'N/A'}</td>
-                                      <td style={{ padding: 6 }}>{loc ? `${loc.type === 'store' ? '🏪' : '🏬'} ${loc.name}` : 'Unknown'}</td>
-                                      <td style={{ padding: 6 }}>
-                                        <span className="badge" style={l.isNewProduct
-                                          ? { background: 'rgba(37,99,235,0.1)', color: '#2563eb' }
-                                          : { background: 'rgba(22,163,74,0.1)', color: '#16a34a' }}>
-                                          {l.isNewProduct ? 'New' : 'Restock'}
-                                        </span>
-                                      </td>
                                       {isEditing ? (
                                         <>
-                                          <td style={{ padding: 6 }}>
+                                          <td style={{ padding: '6px 8px 6px 28px' }}>
                                             <input
-                                              type="number" className="form-input" style={{ width: 70, padding: 4 }}
-                                              value={logEditForm.qty}
-                                              onChange={(e) => setLogEditForm(f => ({ ...f, qty: e.target.value }))}
+                                              className="form-input" style={{ width: 110, padding: 4 }}
+                                              value={logEditForm.name}
+                                              onChange={(e) => setLogEditForm(f => ({ ...f, name: e.target.value }))}
                                             />
                                           </td>
+                                          <td style={{ padding: 6 }}>
+                                            <input
+                                              className="form-input" style={{ width: 70, padding: 4 }}
+                                              value={logEditForm.size}
+                                              onChange={(e) => setLogEditForm(f => ({ ...f, size: e.target.value }))}
+                                            />
+                                          </td>
+                                          <td style={{ padding: 6 }}>
+                                            <input
+                                              className="form-input" style={{ width: 70, padding: 4 }}
+                                              value={logEditForm.brand}
+                                              onChange={(e) => setLogEditForm(f => ({ ...f, brand: e.target.value }))}
+                                            />
+                                          </td>
+                                          <td style={{ padding: 6 }}>
+                                            <select
+                                              className="form-select" style={{ padding: 4 }}
+                                              value={logEditForm.locationId}
+                                              onChange={(e) => setLogEditForm(f => ({ ...f, locationId: e.target.value }))}
+                                            >
+                                              {locations.map(loc2 => (
+                                                <option key={loc2.id} value={loc2.id}>{loc2.type === 'store' ? '🏪' : '🏬'} {loc2.name}</option>
+                                              ))}
+                                            </select>
+                                          </td>
+                                          {owner && (
+                                            <td style={{ padding: 6 }}>
+                                              <input
+                                                type="number" className="form-input" style={{ width: 90, padding: 4 }}
+                                                value={logEditForm.buyPrice}
+                                                onChange={(e) => setLogEditForm(f => ({ ...f, buyPrice: e.target.value }))}
+                                              />
+                                            </td>
+                                          )}
                                           <td style={{ padding: 6 }}>
                                             <input
                                               type="number" className="form-input" style={{ width: 90, padding: 4 }}
@@ -315,17 +355,45 @@ export default function Inventory() {
                                               onChange={(e) => setLogEditForm(f => ({ ...f, unitPrice: e.target.value }))}
                                             />
                                           </td>
+                                          <td style={{ padding: 6 }}>
+                                            <input
+                                              type="number" className="form-input" style={{ width: 70, padding: 4 }}
+                                              value={logEditForm.qty}
+                                              onChange={(e) => setLogEditForm(f => ({ ...f, qty: e.target.value }))}
+                                            />
+                                          </td>
                                           <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>
                                             {fmt((parseInt(logEditForm.qty, 10) || 0) * (parseFloat(logEditForm.unitPrice) || 0))}
+                                          </td>
+                                          <td style={{ padding: 6 }}>
+                                            <input
+                                              className="form-input" style={{ width: 130, padding: 4 }}
+                                              placeholder="mfano: Kiwanda X, Manual..."
+                                              value={logEditForm.source}
+                                              onChange={(e) => setLogEditForm(f => ({ ...f, source: e.target.value }))}
+                                            />
                                           </td>
                                         </>
                                       ) : (
                                         <>
-                                          <td style={{ padding: 6, fontWeight: 700 }}>{l.qty}</td>
+                                          <td style={{ padding: '6px 8px 6px 28px', fontWeight: 600 }}>{l.name}</td>
+                                          <td style={{ padding: 6 }}>{l.size || 'N/A'}</td>
+                                          <td style={{ padding: 6 }}>{l.brand || 'N/A'}</td>
+                                          <td style={{ padding: 6 }}>{loc ? `${loc.type === 'store' ? '🏪' : '🏬'} ${loc.name}` : 'Unknown'}</td>
+                                          {owner && <td style={{ padding: 6 }}>{fmt(l.buyPrice || 0)}</td>}
                                           <td style={{ padding: 6 }}>{fmt(l.unitPrice)}</td>
+                                          <td style={{ padding: 6, fontWeight: 700 }}>{l.qty}</td>
                                           <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>{fmt(l.totalValue)}</td>
+                                          <td style={{ padding: 6, color: '#64748b' }}>{l.source || 'Manual (Inventory)'}</td>
                                         </>
                                       )}
+                                      <td style={{ padding: 6 }}>
+                                        <span className="badge" style={l.isNewProduct
+                                          ? { background: 'rgba(37,99,235,0.1)', color: '#2563eb' }
+                                          : { background: 'rgba(22,163,74,0.1)', color: '#16a34a' }}>
+                                          {l.isNewProduct ? 'New' : 'Restock'}
+                                        </span>
+                                      </td>
                                       {canManage && (
                                         <td style={{ padding: 6, whiteSpace: 'nowrap' }}>
                                           {isEditing ? (
