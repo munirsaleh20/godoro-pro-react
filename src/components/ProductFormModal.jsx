@@ -55,14 +55,24 @@ export default function ProductFormModal({ open, mode, initial, locationOptions,
   const resolvedBrand = form.brandSel === OTHER_VALUE ? form.brandOther.trim() : form.brandSel;
 
   // KIPENGELE: "Auto-fill Price" - sawa na Bulk Add: kama bidhaa hii
-  // (jina+size+brand) tayari ipo DUKA LOLOTE (kwanza duka lililochaguliwa
-  // hapa, kisha duka lingine lolote kama haipo hapa), Buy/Sell Price
-  // zake za sasa zinajazwa moja kwa moja - bado zinabaki EDITABLE.
+  // (jina+size, Brand ikiwezekana) tayari ipo DUKA LOLOTE (kwanza duka
+  // lililochaguliwa hapa, kisha duka lingine lolote kama haipo hapa),
+  // Buy/Sell Price zake za sasa zinajazwa moja kwa moja - bado zinabaki
+  // EDITABLE.
+  // KUMBUKA: Brand SI lazima ilingane sawasawa ili bei ijae - mara nyingi
+  // Brand haijazwi sawasawa (wakati mwingine tupu, wakati mwingine "N/A")
+  // hata kwa bidhaa ile ile - kuilazimisha kulingana kilikuwa kinazuia
+  // Buy Price kujaza automatic (ikibaki 0) hata bidhaa hiyo hiyo ikiwa
+  // tayari ipo. Tunapendelea match yenye Brand sawa ikiwepo, la sivyo
+  // tunatumia Jina+Size pekee.
   const norm = (s) => (s || '').toString().trim().toLowerCase();
   useEffect(() => {
     if (!open || mode !== 'add' || priceTouched || !resolvedName) return;
-    const isMatch = (p) => norm(p.name) === norm(resolvedName) && norm(p.size) === norm(resolvedSize) && norm(p.brand) === norm(resolvedBrand);
-    const match = (form.locationId ? getProducts(form.locationId).find(isMatch) : null) || products.find(isMatch);
+    const isMatchStrict = (p) => norm(p.name) === norm(resolvedName) && norm(p.size) === norm(resolvedSize) && norm(p.brand) === norm(resolvedBrand);
+    const isMatchLoose = (p) => norm(p.name) === norm(resolvedName) && norm(p.size) === norm(resolvedSize);
+    const findMatch = (list) => list.find(isMatchStrict) || list.find(isMatchLoose) || null;
+    const localPool = form.locationId ? getProducts(form.locationId) : [];
+    const match = findMatch(localPool) || findMatch(products);
     if (match) {
       setForm(f => ({
         ...f,

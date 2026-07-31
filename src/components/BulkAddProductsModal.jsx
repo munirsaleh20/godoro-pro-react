@@ -46,10 +46,11 @@ export default function BulkAddProductsModal({ open, locationOptions, onClose, o
 
   const norm = (s) => (s || '').toString().trim().toLowerCase();
 
-  // KIPENGELE: "Auto-fill Price" - kama bidhaa hii (jina+size+brand) tayari
-  // ipo kwenye duka lililochaguliwa, tunachukua Buy/Sell Price yake ya sasa
-  // moja kwa moja, badala ya kumlazimu mtumiaji kuandika bei upya kila mara.
-  // Bei bado inabaki EDITABLE - akiibadilisha kwa mkono, hatuigusi tena.
+  // KIPENGELE: "Auto-fill Price" - kama bidhaa hii (jina+size, Brand
+  // ikiwezekana) tayari ipo kwenye duka lililochaguliwa, tunachukua Buy/Sell
+  // Price yake ya sasa moja kwa moja, badala ya kumlazimu mtumiaji
+  // kuandika bei upya kila mara. Bei bado inabaki EDITABLE - akiibadilisha
+  // kwa mkono, hatuigusi tena.
   //
   // FIX/BOMA: awali auto-fill ilitafuta DUKA HILI PEKEE - kama bidhaa
   // haijawahi kuwekwa kwenye DUKA HILI (hata kama ipo kwenye maduka
@@ -58,15 +59,19 @@ export default function BulkAddProductsModal({ open, locationOptions, onClose, o
   // kuwa na bei tofauti kimakusudi); (2) kama HAIPO kabisa kwenye duka
   // hili, tafuta kwenye MADUKA YOTE (bidhaa ile ile popote ilipo) na
   // tumia bei yake kama pendekezo - bado inabaki editable.
+  //
+  // FIX YA PILI: Brand SI lazima ilingane sawasawa - mara nyingi Brand
+  // haijazwi sawasawa (tupu dhidi ya "N/A") hata kwa bidhaa ile ile,
+  // kuilazimisha kulingana kulikuwa kinazuia Buy Price kujaza automatic
+  // (ikibaki 0). Tunapendelea match yenye Brand sawa ikiwepo, la sivyo
+  // Jina+Size pekee.
   const findPriceMatch = (name, size, brand) => {
     if (!locationId || !name) return null;
-    const localMatch = getProducts(locationId).find(p => (
-      norm(p.name) === norm(name) && norm(p.size) === norm(size) && norm(p.brand) === norm(brand)
-    ));
-    if (localMatch) return localMatch;
-    return products.find(p => (
-      norm(p.name) === norm(name) && norm(p.size) === norm(size) && norm(p.brand) === norm(brand)
-    )) || null;
+    const isMatchStrict = (p) => norm(p.name) === norm(name) && norm(p.size) === norm(size) && norm(p.brand) === norm(brand);
+    const isMatchLoose = (p) => norm(p.name) === norm(name) && norm(p.size) === norm(size);
+    const local = getProducts(locationId);
+    return local.find(isMatchStrict) || local.find(isMatchLoose)
+      || products.find(isMatchStrict) || products.find(isMatchLoose) || null;
   };
 
   const updateRow = (idx, patch) => {
