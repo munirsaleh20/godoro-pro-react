@@ -1976,7 +1976,7 @@ export function DataProvider({ children }) {
           buy: it.buyPrice || existing.buy, sell: it.sellPrice || existing.sell,
           cat: existing.cat, stock: existing.stock + (it.quantity || 0),
         }, source);
-        resolvedItems.push({ productId: existing.id, name: existing.name, size: existing.size, quantity: it.quantity, buyPrice: it.buyPrice });
+        resolvedItems.push({ productId: existing.id, name: existing.name, size: existing.size, quantity: it.quantity, buyPrice: it.buyPrice, sellPrice: it.sellPrice || existing.sell });
       } else {
         if (!it.sellPrice || it.sellPrice <= 0) {
           throw new Error(`Weka bei ya kuuza kwa bidhaa mpya "${it.name}"`);
@@ -1985,7 +1985,7 @@ export function DataProvider({ children }) {
           locationId, name: it.name, size: it.size, brand: it.brand || '',
           buy: it.buyPrice || 0, sell: it.sellPrice, stock: it.quantity || 0, cat: it.cat || 'Spring',
         }, null, source);
-        resolvedItems.push({ productId: created.id, name: created.name, size: created.size, quantity: it.quantity, buyPrice: it.buyPrice });
+        resolvedItems.push({ productId: created.id, name: created.name, size: created.size, quantity: it.quantity, buyPrice: it.buyPrice, sellPrice: it.sellPrice });
       }
     }
 
@@ -2017,7 +2017,7 @@ export function DataProvider({ children }) {
     if (!items || !items.length) throw new Error('Weka angalau bidhaa moja iliyopokelewa');
     const resolvedItems = items.map(it => ({
       name: it.name, size: it.size, brand: it.brand || '', cat: it.cat || '',
-      quantity: it.quantity, buyPrice: it.buyPrice,
+      quantity: it.quantity, buyPrice: it.buyPrice, sellPrice: it.sellPrice || 0,
     }));
     const amount = items.reduce((sum, it) => sum + (it.quantity || 0) * (it.buyPrice || 0), 0);
     const dropshipGroupId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -2127,20 +2127,24 @@ export function DataProvider({ children }) {
             buy: it.buyPrice || existing.buy, sell: existing.sell, cat: existing.cat,
             stock: existing.stock + (it.quantity || 0),
           }, source);
-          resolvedItems.push({ productId: existing.id, name: existing.name, size: existing.size, quantity: it.quantity, buyPrice: it.buyPrice });
+          resolvedItems.push({ productId: existing.id, name: existing.name, size: existing.size, quantity: it.quantity, buyPrice: it.buyPrice, sellPrice: existing.sell });
         } else {
           const created = await addProduct({
             locationId, name: it.name, size: it.size, brand: it.brand || '',
             buy: it.buyPrice || 0, sell: it.buyPrice || 0, stock: it.quantity || 0, cat: it.cat || 'Spring',
           }, null, source);
-          resolvedItems.push({ productId: created.id, name: created.name, size: created.size, quantity: it.quantity, buyPrice: it.buyPrice });
+          resolvedItems.push({ productId: created.id, name: created.name, size: created.size, quantity: it.quantity, buyPrice: it.buyPrice, sellPrice: it.buyPrice });
         }
       }
     } else {
-      resolvedItems = items.map(it => ({
-        name: it.name, size: it.size, brand: it.brand || '', cat: it.cat || '',
-        quantity: it.quantity, buyPrice: it.buyPrice,
-      }));
+      const origByKey = new Map((Array.isArray(txn.items) ? txn.items : []).map(o => [`${(o.name || '').trim().toLowerCase()}|${(o.size || '').trim().toLowerCase()}`, o]));
+      resolvedItems = items.map(it => {
+        const orig = origByKey.get(`${(it.name || '').trim().toLowerCase()}|${(it.size || '').trim().toLowerCase()}`);
+        return {
+          name: it.name, size: it.size, brand: it.brand || '', cat: it.cat || '',
+          quantity: it.quantity, buyPrice: it.buyPrice, sellPrice: it.sellPrice || orig?.sellPrice || 0,
+        };
+      });
     }
 
     const amount = items.reduce((sum, it) => sum + (it.quantity || 0) * (it.buyPrice || 0), 0);

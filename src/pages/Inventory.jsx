@@ -7,6 +7,7 @@ import { fmt } from '../utils/format.js';
 import { matchesSearch } from '../utils/search.js';
 import ProductFormModal from '../components/ProductFormModal.jsx';
 import BulkAddProductsModal from '../components/BulkAddProductsModal.jsx';
+import SupplierShipmentsSummary from '../components/SupplierShipmentsSummary.jsx';
 
 export default function Inventory() {
   const { isManager, isSalesperson, isOwner, currentUser } = useAuth();
@@ -19,6 +20,7 @@ export default function Inventory() {
   const [modalOpen, setModalOpen] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [showShipments, setShowShipments] = useState(false);
   const [expandedDate, setExpandedDate] = useState(null);
   const [mode, setMode] = useState('add');
   const [editing, setEditing] = useState(null);
@@ -216,6 +218,9 @@ export default function Inventory() {
             <button className="btn-ghost" onClick={() => setShowSummary(s => !s)}>
               {showSummary ? '📦 Hide Daily Summary' : '📅 Daily Summary'}
             </button>
+            <button className="btn-ghost" onClick={() => setShowShipments(s => !s)}>
+              {showShipments ? '🚚 Hide Mizigo' : '🚚 Mizigo kwa Supplier'}
+            </button>
             {selectMode ? (
               <>
                 <button
@@ -238,6 +243,8 @@ export default function Inventory() {
           </div>
         )}
       </div>
+
+      {canManage && showShipments && <SupplierShipmentsSummary />}
 
       {canManage && showSummary && (
         <div className="table-container" style={{ overflowX: 'auto', marginBottom: 16 }}>
