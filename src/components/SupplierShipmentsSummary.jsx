@@ -3,21 +3,19 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useData } from '../context/DataContext.jsx';
 import { fmt } from '../utils/format.js';
 
-// KIPENGELE: "Mizigo ya Supplier" - TOFAUTI na Daily Summary (ile
-// inaunganisha bidhaa zote za SIKU MOJA + DUKA MOJA pamoja). Hapa kila
-// MZIGO (kila "Pokea Mzigo Mpya" uliowasilishwa) unaonekana KAMA
-// ULIVYOWASILISHWA - mzigo mmoja mmoja, ukionyesha ni kiwanda (Supplier)
-// gani, unaenda wapi (duka/store au Dropship kwa mteja wa jumla), na
-// bidhaa zilizopokelewa (Jina, Size, Brand, Qty, Buy Price, Sell/Unit
-// Price). Hii inaruhusu kulinganisha bei ya mzigo mpya dhidi ya mzigo
-// uliopita wa bidhaa hiyo hiyo - kila bidhaa inaonyesha bei ya mzigo
-// ULIOTANGULIA (wa mzigo wowote, kiwanda chochote) na tofauti (⬆️/⬇️).
+// KIPENGELE: "Mizigo ya Supplier" - imepangwa kwa MUUNDO WA NGAZI MBILI:
+// SUPPLIER (kiwanda) kwanza, ukifungua ndani ndo unaona MIZIGO yake
+// (kila "Pokea Mzigo Mpya" uliowasilishwa) mmoja mmoja, ikionyesha
+// ulienda wapi (duka/store au Dropship kwa mteja wa jumla). Ukifungua
+// mzigo mmoja zaidi, unaona bidhaa zilizopokelewa (Jina, Size, Brand,
+// Qty, Buy Price, Sell/Unit Price) - na bei ya mzigo ULIOTANGULIA wa
+// bidhaa hiyo hiyo (⬆️/⬇️) kwa kulinganisha.
 export default function SupplierShipmentsSummary() {
   const { isOwner } = useAuth();
   const owner = isOwner();
   const { supplierTransactions, suppliers, locations, wholesaleTransactions, wholesaleCustomers } = useData();
-  const [expandedId, setExpandedId] = useState(null);
-  const [supplierFilter, setSupplierFilter] = useState('all');
+  const [expandedSupplierId, setExpandedSupplierId] = useState(null);
+  const [expandedShipmentId, setExpandedShipmentId] = useState(null);
 
   const shipments = useMemo(() => (
     supplierTransactions
@@ -25,13 +23,9 @@ export default function SupplierShipmentsSummary() {
       .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
   ), [supplierTransactions]);
 
-  const filteredShipments = supplierFilter === 'all'
-    ? shipments
-    : shipments.filter(s => String(s.supplierId) === String(supplierFilter));
-
   // Kwa kila bidhaa (jina+size), tunatunza orodha ya BEI ZOTE za mizigo
-  // iliyopita (kwa mfuatano wa tarehe), ili tuweze kuonyesha "bei ya
-  // mzigo uliotangulia" kwa bidhaa hiyo hiyo kwenye mzigo wa SASA.
+  // iliyopita (kwa mfuatano wa tarehe, MADUKA/SUPPLIERS zote pamoja), ili
+  // tuweze kuonyesha "bei ya mzigo uliotangulia" kwa bidhaa hiyo hiyo.
   const priceHistory = useMemo(() => {
     const chronological = [...shipments].sort((a, b) => (
       (a.date || '').localeCompare(b.date || '') || (a.createdAt || '').localeCompare(b.createdAt || '')
@@ -54,6 +48,25 @@ export default function SupplierShipmentsSummary() {
     if (idx <= 0) return null; // hakuna mzigo uliotangulia wa bidhaa hii
     return history[idx - 1].buyPrice;
   };
+
+  // NGAZI YA 1: kusanya mizigo kwa SUPPLIER - kila supplier mwenye
+  // angalau mzigo mmoja anaonekana kama safu moja, iliyokusanya jumla ya
+  // mizigo yake yote na thamani yake yote.
+  const supplierGroups = useMemo(() => {
+    const bySupplier = new Map();
+    shipments.forEach(t => {
+      const key = String(t.supplierId);
+      if (!bySupplier.has(key)) bySupplier.set(key, []);
+      bySupplier.get(key).push(t);
+    });
+    return Array.from(bySupplier.entries()).map(([supplierId, txns]) => {
+      const supplierName = suppliers.find(s => String(s.id) === supplierId)?.name || 'Haijulikani';
+      const totalValue = owner
+        ? txns.reduce((sum, t) => sum + t.items.reduce((s2, it) => s2 + (it.quantity || 0) * (it.buyPrice || 0), 0), 0)
+        : txns.reduce((sum, t) => sum + t.items.reduce((s2, it) => s2 + (it.quantity || 0) * (it.sellPrice || 0), 0), 0);
+      return { supplierId, supplierName, txns, totalValue };
+    }).sort((a, b) => a.supplierName.localeCompare(b.supplierName));
+  }, [shipments, suppliers, owner]);
 
   const resolveDestination = (txn) => {
     if (txn.locationId) {
@@ -133,51 +146,37 @@ export default function SupplierShipmentsSummary() {
 
   return (
     <div className="table-container" style={{ overflowX: 'auto', marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
-        <h3 className="section-title" style={{ margin: 0 }}>🚚 Mizigo kwa Kila Supplier (Shipment kwa Shipment)</h3>
-        <select className="form-select" style={{ maxWidth: 220 }} value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
-          <option value="all">Wasambazaji Wote (All Suppliers)</option>
-          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </div>
+      <h3 className="section-title" style={{ margin: '0 0 12px' }}>🚚 Mizigo kwa Kila Supplier (Supplier → Mzigo → Duka)</h3>
 
-      {filteredShipments.length === 0 ? (
+      {supplierGroups.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">🚚</div>
           <div className="empty-title">Hakuna Mzigo Bado</div>
-          <div>Mizigo utakayopokea kutoka kwa Suppliers itaonekana hapa, mmoja mmoja.</div>
+          <div>Mizigo utakayopokea kutoka kwa Suppliers itaonekana hapa, kwa kila kiwanda.</div>
         </div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
-              <th style={{ padding: 8 }}>Tarehe</th>
               <th style={{ padding: 8 }}>Kiwanda (Supplier)</th>
-              <th style={{ padding: 8 }}>Kwenda</th>
-              <th style={{ padding: 8 }}>Bidhaa</th>
+              <th style={{ padding: 8 }}>Idadi ya Mizigo</th>
               <th style={{ padding: 8 }}>{owner ? 'Jumla Thamani (Buy)' : 'Jumla Thamani (Sell)'}</th>
-              <th style={{ padding: 8 }}></th>
             </tr>
           </thead>
           <tbody>
-            {filteredShipments.map(txn => {
-              const supplierName = suppliers.find(s => String(s.id) === String(txn.supplierId))?.name || 'Haijulikani';
-              const destination = resolveDestination(txn);
-              const isOpen = expandedId === txn.id;
-              const totalValue = owner
-                ? txn.items.reduce((sum, it) => sum + (it.quantity || 0) * (it.buyPrice || 0), 0)
-                : txn.items.reduce((sum, it) => sum + (it.quantity || 0) * (it.sellPrice || 0), 0);
+            {supplierGroups.map(group => {
+              const isSupplierOpen = expandedSupplierId === group.supplierId;
               return (
-                <FragmentRow
-                  key={txn.id}
-                  txn={txn}
-                  supplierName={supplierName}
-                  destination={destination}
-                  isOpen={isOpen}
-                  totalValue={totalValue}
+                <SupplierRow
+                  key={group.supplierId}
+                  group={group}
+                  isOpen={isSupplierOpen}
                   owner={owner}
-                  onToggle={() => setExpandedId(isOpen ? null : txn.id)}
-                  onPrint={() => handlePrint(txn, supplierName, destination)}
+                  onToggle={() => setExpandedSupplierId(isSupplierOpen ? null : group.supplierId)}
+                  expandedShipmentId={expandedShipmentId}
+                  setExpandedShipmentId={setExpandedShipmentId}
+                  resolveDestination={resolveDestination}
+                  handlePrint={handlePrint}
                   getPreviousBuyPrice={getPreviousBuyPrice}
                 />
               );
@@ -189,26 +188,76 @@ export default function SupplierShipmentsSummary() {
   );
 }
 
-function FragmentRow({ txn, supplierName, destination, isOpen, totalValue, owner, onToggle, onPrint, getPreviousBuyPrice }) {
+function SupplierRow({ group, isOpen, owner, onToggle, expandedShipmentId, setExpandedShipmentId, resolveDestination, handlePrint, getPreviousBuyPrice }) {
   return (
     <>
-      <tr style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }} onClick={onToggle}>
-        <td style={{ padding: 8 }}>{isOpen ? '▾' : '▸'} {txn.date}</td>
-        <td style={{ padding: 8, fontWeight: 600 }}>{supplierName}</td>
-        <td style={{ padding: 8 }}>{destination}</td>
-        <td style={{ padding: 8 }}>{txn.items.length} bidhaa</td>
-        <td style={{ padding: 8, fontWeight: 700, color: '#0d9488' }}>{fmt(totalValue)}</td>
-        <td style={{ padding: 8 }}>
+      <tr style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: isOpen ? '#f8fafc' : undefined }} onClick={onToggle}>
+        <td style={{ padding: 8, fontWeight: 700 }}>{isOpen ? '▾' : '▸'} 🏭 {group.supplierName}</td>
+        <td style={{ padding: 8 }}>{group.txns.length}</td>
+        <td style={{ padding: 8, fontWeight: 700, color: '#0d9488' }}>{fmt(group.totalValue)}</td>
+      </tr>
+      {isOpen && (
+        <tr>
+          <td colSpan={3} style={{ padding: 0, background: '#f8fafc' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>
+                  <th style={{ padding: '6px 8px 6px 28px' }}>Tarehe</th>
+                  <th style={{ padding: 6 }}>Kwenda (Duka/Store)</th>
+                  <th style={{ padding: 6 }}>Bidhaa</th>
+                  <th style={{ padding: 6 }}>{owner ? 'Thamani (Buy)' : 'Thamani (Sell)'}</th>
+                  <th style={{ padding: 6 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.txns.map(txn => {
+                  const destination = resolveDestination(txn);
+                  const isShipmentOpen = expandedShipmentId === txn.id;
+                  const totalValue = owner
+                    ? txn.items.reduce((sum, it) => sum + (it.quantity || 0) * (it.buyPrice || 0), 0)
+                    : txn.items.reduce((sum, it) => sum + (it.quantity || 0) * (it.sellPrice || 0), 0);
+                  return (
+                    <ShipmentRow
+                      key={txn.id}
+                      txn={txn}
+                      destination={destination}
+                      isOpen={isShipmentOpen}
+                      totalValue={totalValue}
+                      owner={owner}
+                      onToggle={() => setExpandedShipmentId(isShipmentOpen ? null : txn.id)}
+                      onPrint={() => handlePrint(txn, group.supplierName, destination)}
+                      getPreviousBuyPrice={getPreviousBuyPrice}
+                    />
+                  );
+                })}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function ShipmentRow({ txn, destination, isOpen, totalValue, owner, onToggle, onPrint, getPreviousBuyPrice }) {
+  return (
+    <>
+      <tr style={{ borderTop: '1px solid #e2e8f0', cursor: 'pointer' }} onClick={onToggle}>
+        <td style={{ padding: '6px 8px 6px 28px' }}>{isOpen ? '▾' : '▸'} {txn.date}</td>
+        <td style={{ padding: 6 }}>{destination}</td>
+        <td style={{ padding: 6 }}>{txn.items.length} bidhaa</td>
+        <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>{fmt(totalValue)}</td>
+        <td style={{ padding: 6 }}>
           <button className="btn-ghost small" onClick={(e) => { e.stopPropagation(); onPrint(); }}>🖨️ Print / PDF</button>
         </td>
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={6} style={{ padding: 0, background: '#f8fafc' }}>
+          <td colSpan={5} style={{ padding: 0, background: '#eef2f7' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>
-                  <th style={{ padding: '6px 8px 6px 28px' }}>Bidhaa</th>
+                  <th style={{ padding: '6px 8px 6px 48px' }}>Bidhaa</th>
                   <th style={{ padding: 6 }}>Size</th>
                   <th style={{ padding: 6 }}>Brand</th>
                   <th style={{ padding: 6 }}>Qty</th>
@@ -222,8 +271,8 @@ function FragmentRow({ txn, supplierName, destination, isOpen, totalValue, owner
                 {txn.items.map((it, idx) => {
                   const prev = getPreviousBuyPrice(txn.id, it.name, it.size);
                   return (
-                    <tr key={idx} style={{ borderTop: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '6px 8px 6px 28px', fontWeight: 600 }}>{it.name}</td>
+                    <tr key={idx} style={{ borderTop: '1px solid #dbe3ee' }}>
+                      <td style={{ padding: '6px 8px 6px 48px', fontWeight: 600 }}>{it.name}</td>
                       <td style={{ padding: 6 }}>{it.size || 'N/A'}</td>
                       <td style={{ padding: 6 }}>{it.brand || 'N/A'}</td>
                       <td style={{ padding: 6 }}>{it.quantity || 0}</td>
