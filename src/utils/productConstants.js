@@ -5,7 +5,7 @@ export const PRODUCT_NAMES = [
   'Comfy', 'Tuff tx', 'Tuff pan', 'Tuff', 'Goldsun premium', 'Goldsun standard',
   'Breeze', 'Jumbo', 'Goldstar', 'Goldstar tx', 'Goldstar pan', 'Dodoma',
   'Dodoma pq', 'Dodoma spring', 'Tanfoam', 'Tanfoam superfoam', 'Tanfoam visco', 'Lolita', 'Tanfoam Premium', 'Mbeya',
-  'Mbeya tx', 'Mbeya pan', 'Family foam', 'Family foam pq', 'Family spring',
+  'Mbeya tx', 'Mbeya pan', 'Family foam', 'Family foam pq', 'Family foam pq extra', 'Family spring',
   'Mnazi mwepesi', 'Mnazi ngumu', 'Mnazi spring', 'Everflex', 'Sheet',
 ];
 
