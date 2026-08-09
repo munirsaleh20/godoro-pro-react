@@ -19,6 +19,44 @@ function addUnique(prev, item, prepend = true) {
   return prepend ? [item, ...prev] : [...prev, item];
 }
 
+// TATIZO LILILOKUWEPO (BUG KUBWA): Supabase/PostgREST inarudisha ROWS 1000
+// TU kwa kila ombi la .select() - hata kama jedwali lina rows zaidi ya
+// hapo, na HAKUNA ERROR inayotolewa (query "inafanikiwa" kimya kimya na
+// data 1000 tu). Kwa jedwali kama 'products' lililokuwa na zaidi ya 1000
+// rows (order('created_at') - kongwe kwanza), rows za MWISHO (bidhaa
+// MPYA zilizoongezwa hivi karibuni) zilikuwa zikikatwa kabisa - hazikuwahi
+// kufika kwenye 'products' state ya app. Matokeo: bidhaa mpya (au mzigo wa
+// supplier uliounda bidhaa mpya) ilikuwa "haionekani" kabisa - si kwenye
+// Inventory list, si kwenye search (ProductLocator), si kwenye "View
+// Products" ya duka - hata baada ya refresh kamili - kwa sababu query
+// yenyewe haikuwahi kuiomba. (Daily Summary bado ilionyesha kwa sababu
+// hiyo inasoma 'inventory_logs' - jedwali TOFAUTI, lililopangwa mpya-
+// kwanza, hivyo bado lilikuwa ndani ya 1000 za kwanza za HILO jedwali.)
+//
+// FIX: badala ya ombi MOJA la .select('*'), tunachukua data kwa "pages"
+// za 1000 kwa kutumia .range(), tukiendelea mpaka page iliyorudishwa iwe
+// na rows pungufu ya PAGE_SIZE (ishara kwamba tumefika mwisho wa jedwali).
+// Hii inahakikisha rows ZOTE zinapatikana, si 1000 za kwanza tu, bila
+// kujali jedwali lina rows ngapi.
+// `buildQuery` ni FUNCTION inayounda query MPYA (mfano
+// `() => sb.from('products').select('*').order('created_at')`), si query
+// tayari - hii inaepuka hatari ya kutumia builder ile ile mara nyingi
+// (ambayo supabase-js haijaundwa kufanya kazi salama nayo).
+async function fetchAllRows(buildQuery) {
+  const PAGE_SIZE = 1000;
+  let all = [];
+  let from = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    all = all.concat(data || []);
+    if (!data || data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}
+
 // Hatua hii: locations + products (inventory) + sales + debts.
 // Staff, expenses zitaongezwa hatua zijazo.
 export function DataProvider({ children }) {
@@ -53,8 +91,7 @@ export function DataProvider({ children }) {
   const loadLocations = useCallback(async () => {
     setLocationsLoading(true);
     try {
-      const { data, error } = await sb.from('locations').select('*').order('created_at');
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('locations').select('*').order('created_at'));
       setLocations((data || []).map(l => ({
         id: l.id,
         name: l.name,
@@ -104,8 +141,7 @@ export function DataProvider({ children }) {
   const loadProducts = useCallback(async () => {
     setProductsLoading(true);
     try {
-      const { data, error } = await sb.from('products').select('*').order('created_at');
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('products').select('*').order('created_at'));
       setProducts((data || []).map(p => ({
         id: p.id,
         locationId: p.location_id,
@@ -412,8 +448,7 @@ export function DataProvider({ children }) {
   const loadInventoryLogs = useCallback(async () => {
     setInventoryLogsLoading(true);
     try {
-      const { data, error } = await sb.from('inventory_logs').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('inventory_logs').select('*').order('created_at', { ascending: false }));
       setInventoryLogs((data || []).map(l => ({
         id: l.id, locationId: l.location_id, productId: l.product_id,
         name: l.product_name, size: l.size || '', brand: l.brand || '',
@@ -599,11 +634,10 @@ export function DataProvider({ children }) {
   const loadDebts = useCallback(async () => {
     setDebtsLoading(true);
     try {
-      const { data, error } = await sb.from('debts')
+      const data = await fetchAllRows(() => sb.from('debts')
         .select('*')
         .eq('is_paid', false)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+        .order('created_at', { ascending: false }));
       setDebts((data || []).map(d => ({
         id: d.id,
         saleId: d.sale_id,
@@ -730,8 +764,7 @@ export function DataProvider({ children }) {
   const loadSales = useCallback(async () => {
     setSalesLoading(true);
     try {
-      const { data, error } = await sb.from('sales').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('sales').select('*').order('created_at', { ascending: false }));
       setSales((data || []).map(s => ({
         id: s.id,
         locationId: s.location_id,
@@ -982,8 +1015,7 @@ export function DataProvider({ children }) {
   const loadStaff = useCallback(async () => {
     setStaffLoading(true);
     try {
-      const { data, error } = await sb.from('staff').select('*').order('created_at');
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('staff').select('*').order('created_at'));
       setStaff((data || []).map(s => ({
         id: s.id,
         name: s.name,
@@ -1167,8 +1199,7 @@ export function DataProvider({ children }) {
   const loadExpenses = useCallback(async () => {
     setExpensesLoading(true);
     try {
-      const { data, error } = await sb.from('expenses').select('*').order('expense_date', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('expenses').select('*').order('expense_date', { ascending: false }));
       setExpenses((data || []).map(e => ({
         id: e.id,
         locationId: e.location_id,
@@ -1239,8 +1270,7 @@ export function DataProvider({ children }) {
   const loadTransfers = useCallback(async () => {
     setTransfersLoading(true);
     try {
-      const { data, error } = await sb.from('transfers').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('transfers').select('*').order('created_at', { ascending: false }));
       setTransfers((data || []).map(t => ({
         id: t.id,
         fromLocationId: t.from_location_id,
@@ -1450,8 +1480,7 @@ export function DataProvider({ children }) {
   const loadReturns = useCallback(async () => {
     setReturnsLoading(true);
     try {
-      const { data, error } = await sb.from('returns').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('returns').select('*').order('created_at', { ascending: false }));
       setReturns((data || []).map(r => ({
         id: r.id,
         originalSaleId: r.original_sale_id,
@@ -1602,8 +1631,7 @@ export function DataProvider({ children }) {
   const loadWholesaleCustomers = useCallback(async () => {
     setWholesaleCustomersLoading(true);
     try {
-      const { data, error } = await sb.from('wholesale_customers').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('wholesale_customers').select('*').order('created_at', { ascending: false }));
       setWholesaleCustomers((data || []).map(c => ({
         id: c.id,
         name: c.name,
@@ -1660,8 +1688,7 @@ export function DataProvider({ children }) {
   const loadWholesaleTransactions = useCallback(async () => {
     setWholesaleTransactionsLoading(true);
     try {
-      const { data, error } = await sb.from('wholesale_transactions').select('*').order('date', { ascending: true }).order('created_at', { ascending: true });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('wholesale_transactions').select('*').order('date', { ascending: true }).order('created_at', { ascending: true }));
       setWholesaleTransactions((data || []).map(t => ({
         id: t.id,
         customerId: t.customer_id,
@@ -1883,8 +1910,7 @@ export function DataProvider({ children }) {
   const loadSuppliers = useCallback(async () => {
     setSuppliersLoading(true);
     try {
-      const { data, error } = await sb.from('suppliers').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('suppliers').select('*').order('created_at', { ascending: false }));
       setSuppliers((data || []).map(s => ({
         id: s.id, name: s.name, phone: s.phone || '', address: s.address || '',
         notes: s.notes || '', createdBy: s.created_by, createdAt: s.created_at,
@@ -1933,8 +1959,7 @@ export function DataProvider({ children }) {
   const loadSupplierTransactions = useCallback(async () => {
     setSupplierTransactionsLoading(true);
     try {
-      const { data, error } = await sb.from('supplier_transactions').select('*').order('date', { ascending: true }).order('created_at', { ascending: true });
-      if (error) throw error;
+      const data = await fetchAllRows(() => sb.from('supplier_transactions').select('*').order('date', { ascending: true }).order('created_at', { ascending: true }));
       setSupplierTransactions((data || []).map(t => ({
         id: t.id, supplierId: t.supplier_id, locationId: t.location_id, type: t.type,
         description: t.description || '', items: t.items || null, amount: t.amount || 0,
