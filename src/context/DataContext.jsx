@@ -836,11 +836,31 @@ export function DataProvider({ children }) {
     if (saleError) throw new Error(saleError.message);
 
     if (matchedProduct) {
-      const newStock = matchedProduct.stock - quantity;
-      const { error: stockError } = await sb.from('products')
-        .update({ stock: newStock, updated_at: new Date().toISOString() })
-        .eq('id', matchedProduct.id);
-      if (stockError) console.error('Failed to update stock:', stockError);
+      // FIX: TATIZO LILILOKUWEPO: kukokotoa "stock - quantity" kwa JS
+      // kwa kutumia `matchedProduct.stock` (kumbukumbu ya screen) - kama
+      // sale nyingi za bidhaa ILE ILE zinafanyika mfululizo (mfano Bulk
+      // Sale ikiwa na bidhaa ile ile mara zaidi ya moja kwenye cart moja),
+      // kila hesabu ilikuwa ikitumia stock ya MWANZO (kabla ya bidhaa
+      // yoyote ya cart hiyo kuuzwa), hivyo hesabu za mwisho zilikuwa
+      // zikiandika juu ya (overwrite) matokeo sahihi ya kabla yake -
+      // stock ya kweli haikupungua ipasavyo, na bidhaa iliyouzwa
+      // ilibaki "ikionekana" kwenye stock ya duka. Sasa: RPC
+      // `adjust_product_stock` inapunguza MOJA KWA MOJA kwenye database
+      // (delta hasi), ikitumia thamani HALISI ya sasa - si kumbukumbu ya
+      // screen - hivyo mauzo mengi mfululizo yanapunguza kwa usahihi.
+      const { data: updatedProductRows, error: stockError } = await sb
+        .rpc('adjust_product_stock', { p_product_id: matchedProduct.id, p_delta: -quantity });
+      if (stockError) {
+        throw new Error(`Mauzo yamehifadhiwa, LAKINI stock haikupungua: ${stockError.message}`);
+      }
+      const updatedProduct = updatedProductRows && updatedProductRows[0];
+      if (!updatedProduct) {
+        // Sifuri rows ziliathirika - kwa kawaida ni RLS (ruhusa) inayozuia
+        // huyu mtumiaji kubadilisha bidhaa hii. Mjulishe wazi badala ya
+        // kuacha stock "ikiyeyuka" kimya kimya.
+        throw new Error('Mauzo yamehifadhiwa, LAKINI stock haikupungua kwa sababu huna ruhusa ya kubadilisha bidhaa hii (RLS kwenye jedwali la products). Muulize msimamizi aangalie UPDATE policy ya products.');
+      }
+      const newStock = updatedProduct.stock;
       setProducts(prev => prev.map(p => (String(p.id) === String(matchedProduct.id) ? { ...p, stock: newStock } : p)));
     }
 
@@ -926,17 +946,20 @@ export function DataProvider({ children }) {
     if (saleToDelete?.productId) {
       const currentProduct = products.find(p => String(p.id) === String(saleToDelete.productId));
       if (currentProduct) {
-        const newStock = (Number(currentProduct.stock) || 0) + (Number(saleToDelete.quantity) || 0);
-        const { data: updatedRows, error: stockErr } = await sb.from('products')
-          .update({ stock: newStock, updated_at: new Date().toISOString() })
-          .eq('id', saleToDelete.productId)
-          .select();
+        // FIX: kama addSale - tunatumia RPC `adjust_product_stock` (delta
+        // chanya) badala ya kukokotoa "stock + quantity" kwa JS kutoka
+        // kwenye kumbukumbu ya screen, ili kurejesha stock kuwe SAHIHI
+        // hata kama sales kadhaa za bidhaa ile ile zinafutwa mfululizo
+        // kabla screen kupata muda wa kupakua upya state.
+        const { data: updatedRows, error: stockErr } = await sb
+          .rpc('adjust_product_stock', { p_product_id: saleToDelete.productId, p_delta: Number(saleToDelete.quantity) || 0 });
 
         if (stockErr) {
           console.error('Failed to restore stock after sale delete:', stockErr);
           throw new Error(`Sale imefutwa, LAKINI stock haikurudi: ${stockErr.message}`);
         }
-        if (!updatedRows || updatedRows.length === 0) {
+        const updatedProduct = updatedRows && updatedRows[0];
+        if (!updatedProduct) {
           // Update haikuathiri rekodi yoyote - kwa kawaida hii ni RLS
           // (ruhusa ya UPDATE kwenye jedwali la products) inayozuia
           // huyu mtumiaji kubadilisha bidhaa hii.
@@ -944,7 +967,7 @@ export function DataProvider({ children }) {
         }
 
         setProducts(prev => prev.map(p => (
-          String(p.id) === String(saleToDelete.productId) ? { ...p, stock: newStock } : p
+          String(p.id) === String(saleToDelete.productId) ? { ...p, stock: updatedProduct.stock } : p
         )));
       } else {
         console.error('Stock restore skipped: bidhaa haikuonekana kwenye orodha ya sasa ya products (productId:', saleToDelete.productId, ')');
