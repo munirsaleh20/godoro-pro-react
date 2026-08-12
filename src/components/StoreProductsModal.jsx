@@ -14,10 +14,14 @@ export default function StoreProductsModal({ open, location, products, onClose }
   const { isManager } = useAuth();
   const [search, setSearch] = useState('');
 
-  if (!open || !location) return null;
-
   const list = products || [];
 
+  // MUHIMU: useMemo hii lazima ipigwe SIKU ZOTE (kabla ya "if (!open) return
+  // null" chini) - React inahitaji hooks zote zipigwe kwa mpangilio SAWA
+  // kila wakati component inapo-render. Ilipokuwa chini ya early-return,
+  // modal ikifungwa (open=false) hooks zilikuwa chache kuliko ilipofunguliwa
+  // (open=true) - hii ilisababisha React kuvunjika na skrini kuwa nyeupe
+  // tupu (blank white screen) muda mzuri wa kufungua duka/store.
   const filteredList = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return list;
@@ -28,6 +32,8 @@ export default function StoreProductsModal({ open, location, products, onClose }
       (p.cat || '').toLowerCase().includes(q)
     ));
   }, [list, search]);
+
+  if (!open || !location) return null;
 
   const totalStock = filteredList.reduce((sum, p) => sum + (p.stock || 0), 0);
 
