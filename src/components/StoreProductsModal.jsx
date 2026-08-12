@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { fmt } from '../utils/format.js';
@@ -6,13 +7,29 @@ import { fmt } from '../utils/format.js';
 // size, brand, category, na idadi (stock). Ina vitufe vya "Print" (inafungua
 // dirisha jipya tayari kwa kuchapisha - unaweza "Save as PDF" ambayo inafunguka
 // vizuri kwenye Word) na "Export CSV" (inafunguka moja kwa moja kwenye Excel).
+// Ina pia sehemu ya "Tafuta Bidhaa" - inachuja kwa jina, size, au brand,
+// na TU zinazoonekana kwenye orodha (baada ya kuchuja) ndizo zinazoprint/
+// export - hivyo unaweza kuprint/export orodha iliyochujwa pekee.
 export default function StoreProductsModal({ open, location, products, onClose }) {
   const { isManager } = useAuth();
+  const [search, setSearch] = useState('');
 
   if (!open || !location) return null;
 
   const list = products || [];
-  const totalStock = list.reduce((sum, p) => sum + (p.stock || 0), 0);
+
+  const filteredList = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(p => (
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.size || '').toLowerCase().includes(q) ||
+      (p.brand || '').toLowerCase().includes(q) ||
+      (p.cat || '').toLowerCase().includes(q)
+    ));
+  }, [list, search]);
+
+  const totalStock = filteredList.reduce((sum, p) => sum + (p.stock || 0), 0);
 
   const handlePrint = () => {
     // KIPENGELE: Kuprint - ondoa Buy Price (ni siri ya biashara, isionekane
@@ -20,7 +37,7 @@ export default function StoreProductsModal({ open, location, products, onClose }
     // stock 0 (hazina maana kuonyeshwa kwenye ripoti ya nini kipo dukani).
     // Hii ni kwenye PRINT TU - modal, CSV export, na ukurasa wa Inventory
     // havibadiliki, bado vinaonyesha Buy Price na bidhaa za stock 0.
-    const printList = list.filter(p => (p.stock || 0) > 0);
+    const printList = filteredList.filter(p => (p.stock || 0) > 0);
     const printTotalStock = printList.reduce((sum, p) => sum + (p.stock || 0), 0);
 
     const rows = printList.map(p => `
@@ -81,7 +98,7 @@ export default function StoreProductsModal({ open, location, products, onClose }
   const handleExportCsv = () => {
     const headers = ['Product', 'Size', 'Brand', 'Category', ...(isManager() ? ['Buy Price'] : []), 'Sell Price', 'Stock'];
     const lines = [headers.join(',')];
-    list.forEach(p => {
+    filteredList.forEach(p => {
       const row = [
         csvSafe(p.name), csvSafe(p.size || ''), csvSafe(p.brand || ''), csvSafe(p.cat || ''),
         ...(isManager() ? [p.buy || 0] : []),
@@ -104,11 +121,21 @@ export default function StoreProductsModal({ open, location, products, onClose }
   return (
     <Modal open={open} title={`📋 ${location.name} — Bidhaa (Products)`} onClose={onClose}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontSize: 13, color: '#64748b' }}>{list.length} products · {totalStock} units in stock</div>
+        <div style={{ fontSize: 13, color: '#64748b' }}>{filteredList.length} products · {totalStock} units in stock</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-ghost small" onClick={handlePrint}>🖨️ Print</button>
           <button className="btn-ghost small" onClick={handleExportCsv}>📊 Export to Excel (CSV)</button>
         </div>
+      </div>
+
+      <div className="form-group" style={{ marginBottom: 12 }}>
+        <input
+          className="form-input"
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="🔍 Tafuta Bidhaa (jina, size, brand, category)..."
+        />
       </div>
 
       <div style={{ maxHeight: 420, overflowY: 'auto' }}>
@@ -117,6 +144,12 @@ export default function StoreProductsModal({ open, location, products, onClose }
             <div className="empty-icon">📦</div>
             <div className="empty-title">No Products Yet</div>
             <div>This location has no products in stock yet.</div>
+          </div>
+        ) : filteredList.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">🔍</div>
+            <div className="empty-title">Hakuna Bidhaa Iliyopatikana</div>
+            <div>Hakuna bidhaa inayolingana na "{search}" kwenye duka/store hili.</div>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -132,7 +165,7 @@ export default function StoreProductsModal({ open, location, products, onClose }
               </tr>
             </thead>
             <tbody>
-              {list.map(p => {
+              {filteredList.map(p => {
                 const stockColor = p.stock < 5 ? '#dc2626' : p.stock < 10 ? '#e07b2a' : '#16a34a';
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>

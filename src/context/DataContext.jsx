@@ -251,8 +251,23 @@ export function DataProvider({ children }) {
     const nName = norm(name);
     const nSize = norm(size);
     const nBrand = norm(brand);
-    return list.find(p => (
+    // FIX: Brand haijazwi sawasawa kwenye baadhi ya bidhaa (mara tupu,
+    // mara "N/A") HATA kwa bidhaa ILE ILE (tazama maelezo kama hayo
+    // kwenye ProductFormModal.jsx). Kulazimisha Brand kulingana SAWASAWA
+    // hapa kulikuwa kikizuia kupata bidhaa iliyopo tayari wakati wa
+    // kupokea mzigo (Supplier) - matokeo: rekodi MPYA (duplicate)
+    // iliundwa kila mara Brand text ilipokuwa tofauti kidogo, badala ya
+    // stock kuongezwa kwenye ile iliyopo - bidhaa "mbili" za jina+size
+    // sawa zikaishia kuonekana kwenye duka moja, moja ikiwa haijaguswa
+    // kabisa na mauzo/receiving mpya. Sasa: tunapendelea match yenye
+    // Brand sawa ikiwepo (exact), la sivyo tunarudi kwenye Jina+Size
+    // pekee (kupuuza Brand) - SIZE bado ni lazima ilingane kikamilifu.
+    const exact = list.find(p => (
       norm(p.name) === nName && norm(p.size) === nSize && norm(p.brand) === nBrand
+    ));
+    if (exact) return exact;
+    return list.find(p => (
+      norm(p.name) === nName && norm(p.size) === nSize
     )) || null;
   }, [getProducts]);
 
