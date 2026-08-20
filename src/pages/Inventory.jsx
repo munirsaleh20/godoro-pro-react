@@ -271,7 +271,7 @@ export default function Inventory() {
                 {dailyInventorySummary.map(d => {
                   const rowKey = `${d.date}|${d.locationId}`;
                   const isOpen = expandedDate === rowKey;
-                  const dayLogs = isOpen ? inventoryLogs.filter(l => l.date === d.date && String(l.locationId) === String(d.locationId)) : [];
+                  const dayLogs = isOpen ? inventoryLogs.filter(l => l.date === d.date && String(l.locationId) === String(d.locationId) && (l.qty || 0) > 0) : [];
                   return (
                     <Fragment key={rowKey}>
                       <tr

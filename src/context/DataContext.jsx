@@ -364,7 +364,17 @@ export function DataProvider({ children }) {
     setProducts(prev => prev.map(p => (String(p.id) === String(id)
       ? { ...p, name, size, brand, buy, sell, stock: finalStock, cat } : p)));
 
-    if (prevProduct && delta > 0) {
+    // FIX (Agosti 2026): awali mstari huu ulilog tu wakati delta > 0
+    // (ongezeko la stock) - kupungua kwa stock (mfano Transfer OUT kutoka
+    // duka la chanzo) hakukuwahi kuandikwa kwenye inventory_logs kabisa,
+    // hivyo audit yoyote iliyotegemea inventory_logs+sales pekee
+    // ilishindwa kueleza kwa nini stock ya maduka fulani ilikuwa "chini"
+    // ya inavyotarajiwa - pengo hilo lilikuwa transfers, si bug ya mauzo.
+    // Sasa: delta yoyote isiyo sifuri (chanya au hasi) inalogiwa, ili
+    // kila mabadiliko ya stock yawe na historia. Muhtasari wa "Daily
+    // Inventory Summary" (dailyInventorySummary chini) bado unahesabu
+    // MAONGEZEKO pekee (qty > 0), hivyo mwonekano wake haubadiliki.
+    if (prevProduct && delta !== 0) {
       try {
         await logInventoryAddition({
           locationId: prevProduct.locationId, productId: id, name, size, brand,
@@ -702,7 +712,11 @@ export function DataProvider({ children }) {
   // ili ionekane wazi ni duka gani bidhaa ziliongezwa.
   const dailyInventorySummary = useMemo(() => {
     const map = {};
-    inventoryLogs.forEach(l => {
+    // FIX (Agosti 2026): updateProduct sasa inalog delta hasi pia
+    // (kupungua kwa stock, mfano Transfer OUT) - ukurasa huu ni
+    // "Muhtasari wa Kuongeza Stock" pekee, kwa hiyo tunaacha nje
+    // matukio yenye qty hasi/sifuri ili mwonekano wake usibadilike.
+    inventoryLogs.filter(l => (l.qty || 0) > 0).forEach(l => {
       if (!l.date) return;
       const key = `${l.date}|${l.locationId}`;
       if (!map[key]) {
@@ -1421,14 +1435,18 @@ export function DataProvider({ children }) {
     }
 
     // 1) Punguza stock chanzo (Store)
+    // FIX (Agosti 2026): source='transfer_out' inapitishwa kwa updateProduct
+    // ili kupungua huku kwa stock kuandikwe kwenye inventory_logs (kama
+    // delta hasi) - awali hakukuwa na rekodi yoyote ya hili.
     for (const it of validItems) {
       await updateProduct(it.productId, {
         name: it.name, size: it.size, brand: it.brand,
         buy: it.buy, sell: it.sell, stock: it.stock - it.quantity, cat: it.cat,
-      });
+      }, 'transfer_out');
     }
 
     // 2) Ongeza stock marudio (Shop) - tafuta bidhaa inayolingana au unda mpya
+    // FIX (Agosti 2026): source='transfer_in' kwa uwazi wa audit.
     for (const it of validItems) {
       const match = products.find(p => (
         String(p.locationId) === String(toLocationId) &&
@@ -1439,12 +1457,12 @@ export function DataProvider({ children }) {
         await updateProduct(match.id, {
           name: match.name, size: match.size, brand: match.brand,
           buy: match.buy, sell: match.sell, stock: match.stock + it.quantity, cat: match.cat,
-        });
+        }, 'transfer_in');
       } else {
         await addProduct({
           locationId: toLocationId, name: it.name, size: it.size, brand: it.brand,
           buy: it.buy, sell: it.sell, stock: it.quantity, cat: it.cat,
-        });
+        }, null, 'transfer_in');
       }
     }
 
@@ -1484,7 +1502,7 @@ export function DataProvider({ children }) {
           name: srcMatch.name, size: srcMatch.size, brand: srcMatch.brand,
           buy: srcMatch.buy, sell: srcMatch.sell, cat: srcMatch.cat,
           stock: srcMatch.stock + (it.quantity || 0),
-        });
+        }, 'transfer_delete_reversal');
       }
 
       const dstMatch = products.find(p => (
@@ -1497,7 +1515,7 @@ export function DataProvider({ children }) {
           name: dstMatch.name, size: dstMatch.size, brand: dstMatch.brand,
           buy: dstMatch.buy, sell: dstMatch.sell, cat: dstMatch.cat,
           stock: Math.max(0, dstMatch.stock - (it.quantity || 0)),
-        });
+        }, 'transfer_delete_reversal');
       }
     }
 
@@ -1564,7 +1582,7 @@ export function DataProvider({ children }) {
       await updateProduct(product.id, {
         name: product.name, size: product.size, brand: product.brand,
         buy: product.buy, sell: product.sell, cat: product.cat, stock: newStock,
-      });
+      }, 'transfer_edit');
     }
 
     // 4) Sasisha rekodi ya uhamisho yenyewe
