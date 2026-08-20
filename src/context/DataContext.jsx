@@ -315,23 +315,60 @@ export function DataProvider({ children }) {
   // inakuwa 5 lakini Summary inaonyesha 3 tu. Sasa: ikiwa Edit inaongeza
   // stock (newStock > stock ya awali), ongezeko (delta) linalogiwa kama
   // "restock" ile ile, ili Muhtasari uwe sahihi bila kujali njia iliyotumika.
+  // FIX (Agosti 2026): TATIZO LILILOKUWEPO - kazi hii ilikuwa ikiandika
+  // `stock` (namba KAMILI) moja kwa moja kwenye database, ikitumia
+  // `prevStock` kutoka kwenye KUMBUKUMBU YA SCREEN (state ya React) kuamua
+  // TU kama kilogiwe kwenye Daily Summary - LAKINI namba HALISI
+  // iliyoandikwa kwenye database ilikuwa ile "newStock" iliyokokotolewa na
+  // MPIGA-SIMU (caller: Transfers, Returns, Wholesale, Suppliers, Inventory
+  // Log edits) kutoka kwenye stock ya SCREEN wakati huo - SI stock halisi
+  // ya sasa kwenye database. Kama kitu kingine (mfano sale) kilikuwa
+  // kimebadilisha stock hiyo hiyo KATI ya screen kupakiwa na wito huu
+  // kufanyika, andiko hili lilikuwa likifuta (overwrite) mabadiliko hayo
+  // kimya kimya - bidhaa "inarudi" kwenye stock ya zamani kana kwamba
+  // haikuuzwa/kuhamishwa. Hii ndiyo iliyosababisha "Goldstar tx" (na
+  // uwezekano wa bidhaa nyingine) kuonekana bado ipo dukani ilhali
+  // ilishauzwa - kwa sababu Transfers/Returns/Wholesale/Suppliers ZOTE
+  // zinapitia kazi hii hii.
+  //
+  // FIX: stock sasa inaandikwa kwa TOFAUTI (delta = newStock iliyoombwa -
+  // prevStock ya screen) kupitia RPC `adjust_product_stock` - kazi hiyo
+  // inafanya "stock = stock + delta" MOJA KWA MOJA kwenye database kwa
+  // kutumia thamani HALISI ya sasa (si kumbukumbu ya screen), hivyo
+  // mabadiliko mengine ya wakati huo huo (mfano sale) HAYAPOTEI. Taarifa
+  // nyingine (jina/size/brand/bei/category) zinaandikwa KANDA na stock -
+  // sawa na kawaida, hazihitaji atomicity ya aina hii.
   const updateProduct = useCallback(async (id, { name, size, brand, buy, sell, stock, cat }, source = null) => {
     const prevProduct = products.find(p => String(p.id) === String(id));
     const prevStock = prevProduct ? (prevProduct.stock || 0) : 0;
     const newStock = parseInt(stock, 10) || 0;
+    const delta = newStock - prevStock;
 
     const { error } = await sb.from('products').update({
-      name, size, brand, buy_price: buy, sell_price: sell, stock, category: cat,
+      name, size, brand, buy_price: buy, sell_price: sell, category: cat,
     }).eq('id', id);
     if (error) throw new Error(error.message);
-    setProducts(prev => prev.map(p => (String(p.id) === String(id)
-      ? { ...p, name, size, brand, buy, sell, stock, cat } : p)));
 
-    if (prevProduct && newStock > prevStock) {
+    let finalStock = prevStock;
+    if (delta !== 0) {
+      const { data: stockRows, error: stockError } = await sb
+        .rpc('adjust_product_stock', { p_product_id: id, p_delta: delta });
+      if (stockError) throw new Error(`Taarifa za bidhaa zimehifadhiwa, LAKINI stock haikubadilika: ${stockError.message}`);
+      const updatedRow = stockRows && stockRows[0];
+      if (!updatedRow) {
+        throw new Error('Taarifa za bidhaa zimehifadhiwa, LAKINI stock haikubadilika kwa sababu huna ruhusa ya kubadilisha bidhaa hii (RLS kwenye jedwali la products). Muulize msimamizi aangalie UPDATE policy ya products.');
+      }
+      finalStock = updatedRow.stock;
+    }
+
+    setProducts(prev => prev.map(p => (String(p.id) === String(id)
+      ? { ...p, name, size, brand, buy, sell, stock: finalStock, cat } : p)));
+
+    if (prevProduct && delta > 0) {
       try {
         await logInventoryAddition({
           locationId: prevProduct.locationId, productId: id, name, size, brand,
-          qty: newStock - prevStock, unitPrice: sell, buyPrice: buy, source, isNewProduct: false,
+          qty: delta, unitPrice: sell, buyPrice: buy, source, isNewProduct: false,
         });
       } catch (logErr) {
         console.error('Stock updated but log failed:', logErr.message);
@@ -380,24 +417,44 @@ export function DataProvider({ children }) {
     const existing = batchOverride || findExactLocationProduct(locationId, name, size, brand);
 
     if (existing) {
-      const newStock = (existing.stock || 0) + (parseInt(stock, 10) || 0);
+      // FIX (Agosti 2026): awali stock mpya ilikokotolewa kwa JS
+      // (existing.stock + qty) kutoka kumbukumbu ya screen kisha kuandikwa
+      // KAMILI kwenye database - kasoro ile ile iliyokuwepo kwenye Sales
+      // kabla ya fix. Sasa: taarifa za bei/category zinaandikwa kando, na
+      // stock inaongezwa kwa RPC ya atomic (delta), ili restock ya bidhaa
+      // hii isipoteze mabadiliko mengine ya wakati mmoja (mfano sale
+      // iliyotokea kabla tu ya restock hii kuhifadhiwa).
+      const addQty = parseInt(stock, 10) || 0;
       const { error } = await sb.from('products').update({
-        stock: newStock, buy_price: buy, sell_price: sell, category: cat,
+        buy_price: buy, sell_price: sell, category: cat,
       }).eq('id', existing.id);
       if (error) throw new Error(error.message);
+
+      let newStock = existing.stock || 0;
+      if (addQty !== 0) {
+        const { data: stockRows, error: stockError } = await sb
+          .rpc('adjust_product_stock', { p_product_id: existing.id, p_delta: addQty });
+        if (stockError) throw new Error(`Bidhaa imehifadhiwa, LAKINI stock haikuongezeka: ${stockError.message}`);
+        const updatedRow = stockRows && stockRows[0];
+        if (!updatedRow) {
+          throw new Error('Bidhaa imehifadhiwa, LAKINI stock haikuongezeka kwa sababu huna ruhusa ya kubadilisha bidhaa hii (RLS kwenye jedwali la products).');
+        }
+        newStock = updatedRow.stock;
+      }
+
       const merged = { ...existing, buy, sell, cat, stock: newStock };
       setProducts(prev => prev.map(p => (String(p.id) === String(existing.id) ? merged : p)));
       let logFailed = false;
       try {
         await logInventoryAddition({
           locationId, productId: existing.id, name: merged.name, size: merged.size, brand: merged.brand,
-          qty: parseInt(stock, 10) || 0, unitPrice: sell, buyPrice: buy, source, isNewProduct: false,
+          qty: addQty, unitPrice: sell, buyPrice: buy, source, isNewProduct: false,
         });
       } catch (logErr) {
         console.error('Restock saved but log failed:', logErr.message);
         logFailed = true;
       }
-      return { ...merged, merged: true, addedQty: parseInt(stock, 10) || 0, addedValue: (parseInt(stock, 10) || 0) * (sell || 0), logFailed };
+      return { ...merged, merged: true, addedQty: addQty, addedValue: addQty * (sell || 0), logFailed };
     }
 
     const { data, error } = await sb.from('products').insert({
@@ -497,13 +554,18 @@ export function DataProvider({ children }) {
 
     setInventoryLogs(prev => prev.filter(l => String(l.id) !== String(id)));
 
-    if (log && log.productId) {
-      const product = products.find(p => String(p.id) === String(log.productId));
-      if (product) {
-        const newStock = Math.max((product.stock || 0) - (log.qty || 0), 0);
-        const { error: stockError } = await sb.from('products').update({ stock: newStock }).eq('id', product.id);
-        if (stockError) console.error('Failed to adjust stock after log delete:', stockError);
-        else setProducts(prev => prev.map(p => (String(p.id) === String(product.id) ? { ...p, stock: newStock } : p)));
+    // FIX (Agosti 2026): stock ilikuwa ikipunguzwa kwa JS (stock - log.qty)
+    // kutoka kumbukumbu ya screen kisha kuandikwa KAMILI - sasa inatumia
+    // RPC ya atomic (delta hasi), sawa na maeneo mengine yote.
+    if (log && log.productId && log.qty) {
+      const { data: stockRows, error: stockError } = await sb
+        .rpc('adjust_product_stock', { p_product_id: log.productId, p_delta: -(log.qty || 0) });
+      if (stockError) {
+        throw new Error(`Log imefutwa, LAKINI stock haikupungua: ${stockError.message}`);
+      }
+      const updatedRow = stockRows && stockRows[0];
+      if (updatedRow) {
+        setProducts(prev => prev.map(p => (String(p.id) === String(log.productId) ? { ...p, stock: updatedRow.stock } : p)));
       }
     }
   }, [inventoryLogs, products]);
@@ -540,25 +602,37 @@ export function DataProvider({ children }) {
     const destinationChanged = String(newLocationId) !== String(log.locationId);
     let newProductId = log.productId;
 
+    // FIX (Agosti 2026): hatua ZOTE tatu hapa chini zilikuwa zikiandika
+    // namba KAMILI ya stock (iliyokokotolewa kwa JS kutoka kumbukumbu ya
+    // screen) - sasa zote zinatumia RPC ya atomic (delta) kwenye database,
+    // sawa na maeneo mengine yote ya mfumo.
     if (destinationChanged) {
       // 1. Punguza stock ya AWALI (kiasi cha log hii) kutoka bidhaa/duka LA ZAMANI.
-      if (log.productId) {
-        const oldProduct = products.find(p => String(p.id) === String(log.productId));
-        if (oldProduct) {
-          const revertedStock = Math.max(0, (oldProduct.stock || 0) - (log.qty || 0));
-          const { error: revertErr } = await sb.from('products').update({ stock: revertedStock }).eq('id', oldProduct.id);
-          if (revertErr) throw new Error(revertErr.message);
-          setProducts(prev => prev.map(p => (String(p.id) === String(oldProduct.id) ? { ...p, stock: revertedStock } : p)));
+      if (log.productId && log.qty) {
+        const { data: revertRows, error: revertErr } = await sb
+          .rpc('adjust_product_stock', { p_product_id: log.productId, p_delta: -(log.qty || 0) });
+        if (revertErr) throw new Error(revertErr.message);
+        const revertedRow = revertRows && revertRows[0];
+        if (revertedRow) {
+          setProducts(prev => prev.map(p => (String(p.id) === String(log.productId) ? { ...p, stock: revertedRow.stock } : p)));
         }
       }
       // 2. Tafuta/unda bidhaa kwenye duka JIPYA, ongeza idadi MPYA huko.
       const destExisting = findExactLocationProduct(newLocationId, newName, newSize, newBrand);
       if (destExisting) {
-        const mergedStock = (destExisting.stock || 0) + newQty;
         const { error: mErr } = await sb.from('products').update({
-          stock: mergedStock, buy_price: newBuyPrice, sell_price: newUnitPrice,
+          buy_price: newBuyPrice, sell_price: newUnitPrice,
         }).eq('id', destExisting.id);
         if (mErr) throw new Error(mErr.message);
+        let mergedStock = destExisting.stock || 0;
+        if (newQty) {
+          const { data: mergeRows, error: dErr } = await sb
+            .rpc('adjust_product_stock', { p_product_id: destExisting.id, p_delta: newQty });
+          if (dErr) throw new Error(dErr.message);
+          const mergedRow = mergeRows && mergeRows[0];
+          if (!mergedRow) throw new Error('Stock haikuongezeka kwenye duka jipya (RLS kwenye jedwali la products).');
+          mergedStock = mergedRow.stock;
+        }
         setProducts(prev => prev.map(p => (String(p.id) === String(destExisting.id)
           ? { ...p, stock: mergedStock, buy: newBuyPrice, sell: newUnitPrice } : p)));
         newProductId = destExisting.id;
@@ -578,21 +652,28 @@ export function DataProvider({ children }) {
       }
     } else {
       // Duka/store haikubadilika - rekebisha stock ya bidhaa ILE ILE kwa
-      // TOFAUTI (delta = newQty - oldQty), na sasisha jina/size/brand/bei
-      // zake kama zimebadilika, bila kuathiri mauzo/marekebisho mengine.
+      // TOFAUTI (delta = newQty - oldQty) kwa RPC atomic, na sasisha
+      // jina/size/brand/bei zake kama zimebadilika, bila kuathiri
+      // mauzo/marekebisho mengine ya wakati mmoja.
       const qtyDelta = newQty - (log.qty || 0);
       if (log.productId) {
-        const product = products.find(p => String(p.id) === String(log.productId));
-        if (product) {
-          const adjustedStock = Math.max(0, (product.stock || 0) + qtyDelta);
-          const { error: pErr } = await sb.from('products').update({
-            name: newName, size: newSize, brand: newBrand,
-            buy_price: newBuyPrice, sell_price: newUnitPrice, stock: adjustedStock,
-          }).eq('id', product.id);
-          if (pErr) throw new Error(pErr.message);
-          setProducts(prev => prev.map(p => (String(p.id) === String(product.id)
-            ? { ...p, name: newName, size: newSize, brand: newBrand, buy: newBuyPrice, sell: newUnitPrice, stock: adjustedStock } : p)));
+        const { error: pErr } = await sb.from('products').update({
+          name: newName, size: newSize, brand: newBrand,
+          buy_price: newBuyPrice, sell_price: newUnitPrice,
+        }).eq('id', log.productId);
+        if (pErr) throw new Error(pErr.message);
+
+        let adjustedStock = products.find(p => String(p.id) === String(log.productId))?.stock || 0;
+        if (qtyDelta !== 0) {
+          const { data: adjRows, error: aErr } = await sb
+            .rpc('adjust_product_stock', { p_product_id: log.productId, p_delta: qtyDelta });
+          if (aErr) throw new Error(aErr.message);
+          const adjRow = adjRows && adjRows[0];
+          if (!adjRow) throw new Error('Stock haikubadilika (RLS kwenye jedwali la products).');
+          adjustedStock = adjRow.stock;
         }
+        setProducts(prev => prev.map(p => (String(p.id) === String(log.productId)
+          ? { ...p, name: newName, size: newSize, brand: newBrand, buy: newBuyPrice, sell: newUnitPrice, stock: adjustedStock } : p)));
       }
     }
 
