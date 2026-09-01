@@ -237,6 +237,72 @@ export default function Suppliers() {
   const wTotalGoods = wLedger.filter(t => t.type === 'goods').reduce((s, t) => s + t.amount, 0);
   const wTotalPaid = wLedger.filter(t => t.type === 'payment').reduce((s, t) => s + t.amount, 0);
 
+  // Print/PDF ya "Statement" ya mteja wa jumla mmoja - inaonyesha muhtasari
+  // (mzigo/malipo/deni) na ledger nzima yenye running balance, tayari kwa kuchapisha.
+  const handlePrintWStatement = () => {
+    const rows = wLedger.map(t => {
+      const loc = t.locationId ? getLocation(t.locationId) : null;
+      const desc = t.type === 'goods' && t.items
+        ? t.items.map(it => `${it.name} (${it.quantity})`).join(', ')
+        : (t.description || (t.type === 'goods' ? 'Mzigo' : 'Malipo'));
+      const descFull = desc + (t.type === 'goods' && loc ? ` · ${loc.name}` : '');
+      return `
+        <tr>
+          <td>${escapeHtml(t.date || '-')}</td>
+          <td>${escapeHtml(descFull)}</td>
+          <td style="text-align:right; color:#dc2626;">${t.type === 'goods' ? fmtS(t.amount) : ''}</td>
+          <td style="text-align:right; color:#16a34a;">${t.type === 'payment' ? fmtS(t.amount) : ''}</td>
+          <td style="text-align:right; font-weight:700;">${fmtS(t.runningBalance)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const html = `
+      <html>
+        <head>
+          <title>Statement - ${escapeHtml(wSelected.name)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #1a1a2e; }
+            h1 { font-size: 20px; margin-bottom: 2px; }
+            .sub { color: #64748b; font-size: 13px; margin-bottom: 4px; }
+            .summary { display: flex; gap: 20px; margin: 16px 0; flex-wrap: wrap; }
+            .summary div { font-size: 13px; }
+            .summary b { display: block; font-size: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+            th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+            th { background: #f1f5f9; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <h1>📊 Statement ya Mteja wa Jumla: ${escapeHtml(wSelected.name)}</h1>
+          <div class="sub">${wSelected.phone ? `📞 ${escapeHtml(wSelected.phone)}` : ''} ${wSelected.address ? `· 📍 ${escapeHtml(wSelected.address)}` : ''}</div>
+          <div class="sub">Tarehe ya Report: ${escapeHtml(new Date().toLocaleDateString('sw-TZ'))}</div>
+          <div class="summary">
+            <div>Jumla ya Mizigo<b style="color:#dc2626;">${fmtS(wTotalGoods)}</b></div>
+            <div>Jumla Iliyolipwa<b style="color:#16a34a;">${fmtS(wTotalPaid)}</b></div>
+            <div>Deni Linalobaki<b>${fmtS(Math.max(0, wSelected.balance))}</b></div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Tarehe</th><th>Maelezo</th><th style="text-align:right;">Mzigo (Debit)</th>
+                <th style="text-align:right;">Malipo (Credit)</th><th style="text-align:right;">Balance</th>
+              </tr>
+            </thead>
+            <tbody>${rows || `<tr><td colspan="5" style="text-align:center; color:#94a3b8;">Bado hakuna miamala</td></tr>`}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const win = window.open('', '_blank');
+    if (!win) { alert('Tafadhali ruhusu pop-ups ili kuprint.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
   // FAIDA ILIYOPATIKANA kwa mteja huyu: kila mzigo (goods) una faida ya
   // (unitPrice - buyPrice) x quantity kwa kila bidhaa. Faida hii TU
   // inaonekana kwa UWIANO wa kile ambacho mteja AMESHALIPA (paidFraction) -
@@ -535,6 +601,7 @@ export default function Suppliers() {
             📦 Toa Mzigo Kupitia Kiwanda (Supplier)
           </button>
           <button className="btn-ghost" onClick={() => setWPaymentModalOpen(true)}>💰 Rekodi Malipo</button>
+          <button className="btn-ghost" onClick={handlePrintWStatement}>🖨️ Print Statement</button>
         </div>
 
         <div className="table-container excel-sheet" style={{ overflowX: 'auto' }}>
@@ -724,4 +791,10 @@ export default function Suppliers() {
       />
     </div>
   );
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
