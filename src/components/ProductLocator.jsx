@@ -10,16 +10,21 @@ import { matchesSearch } from '../utils/search.js';
 // SI stock halisi - haisomi wala kuandika kitu kwenye `products`, hivyo
 // haiathiri stock/mauzo/ripoti za maduka kabisa. locationId hapa ni ya
 // mteja (siyo store/shop), inatambulika kwa `locationType: 'wholesale'`.
+// Jina la mteja wa jumla pekee ambaye bidhaa zake zinapaswa kuonekana
+// kwenye "Tafuta Bidhaa" - kama alivyoomba mtumiaji, siyo wateja wote.
+const WHOLESALE_SEARCH_CUSTOMER_NAME = 'FATMA SAATENI';
+
 function useWholesaleProductRows() {
   const { wholesaleCustomers, wholesaleTransactions } = useData();
 
   return useMemo(() => {
     const rows = new Map(); // key: customerId|name|size -> row
+    const targetName = WHOLESALE_SEARCH_CUSTOMER_NAME.trim().toLowerCase();
 
     for (const t of wholesaleTransactions) {
       if (t.type !== 'goods' || !t.items || !t.items.length) continue;
       const customer = wholesaleCustomers.find(c => String(c.id) === String(t.customerId));
-      if (!customer) continue;
+      if (!customer || (customer.name || '').trim().toLowerCase() !== targetName) continue;
 
       for (const it of t.items) {
         const name = (it.name || '').trim();
