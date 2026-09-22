@@ -30,6 +30,10 @@ export default function Sales() {
   // duka lake pekee kila mara).
   const [locationFilter, setLocationFilter] = useState('all');
   const [page, setPage] = useState(1);
+  // KIPENGELE: "Daily Summary Location Filter" - chagua duka/store maalum
+  // ndani ya "Muhtasari wa Mauzo kwa Siku" ili usilazimike ku-scroll orodha
+  // ndefu ya siku+maduka yote kutafuta duka fulani.
+  const [summaryLocationFilter, setSummaryLocationFilter] = useState('all');
 
   const manager = isManager();
   const owner = isOwner();
@@ -45,6 +49,10 @@ export default function Sales() {
   ));
   const total = list.reduce((sum, s) => sum + s.total, 0);
   const filteringActive = !!(dateFrom || dateTo || locationFilter !== 'all');
+
+  const filteredDailySummary = summaryLocationFilter === 'all'
+    ? dailySalesSummary
+    : dailySalesSummary.filter(d => String(d.locationId) === String(summaryLocationFilter));
 
   useEffect(() => { setPage(1); }, [dateFrom, dateTo, locationFilter]);
 
@@ -136,12 +144,23 @@ export default function Sales() {
 
       {manager && showSummary && (
         <div className="table-container" style={{ overflowX: 'auto', marginBottom: 16 }}>
-          <h3 className="section-title" style={{ margin: '0 0 12px' }}>📅 Muhtasari wa Mauzo kwa Siku</h3>
-          {dailySalesSummary.length === 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <h3 className="section-title" style={{ margin: 0 }}>📅 Muhtasari wa Mauzo kwa Siku</h3>
+            {/* KIPENGELE: chagua duka/store maalum kuona muhtasari wake tu */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <select className="form-select" style={{ padding: '6px 12px', fontSize: 13, minWidth: 160 }} value={summaryLocationFilter} onChange={(e) => setSummaryLocationFilter(e.target.value)}>
+                <option value="all">🏬 Maeneo Yote</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.type === 'store' ? '🏪' : '🏬'} {loc.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {filteredDailySummary.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📅</div>
               <div className="empty-title">No Data Yet</div>
-              <div>Fanya mauzo ili muhtasari uonekane hapa</div>
+              <div>{summaryLocationFilter === 'all' ? 'Fanya mauzo ili muhtasari uonekane hapa' : 'Hakuna mauzo ya duka hili bado'}</div>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -159,7 +178,7 @@ export default function Sales() {
                 </tr>
               </thead>
               <tbody>
-                {dailySalesSummary.map(d => {
+                {filteredDailySummary.map(d => {
                   const rowKey = `${d.date}|${d.locationId}`;
                   const isOpen = expandedSalesDate === rowKey;
                   const daySales = isOpen ? allSalesWithLocations.filter(s => s.date === d.date && String(s.locationId) === String(d.locationId)) : [];

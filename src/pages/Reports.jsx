@@ -196,6 +196,50 @@ export default function Reports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSales]);
 
+  // KIPENGELE: "Profit ya Kila Mwezi" - jedwali linaloonyesha faida ya kila
+  // mwezi (Jan, Feb, Machi...) tofauti na "period" selector iliyopo juu
+  // (Today/This Month/Year/All) ambayo inaonyesha jumla MOJA tu. Hapa
+  // TUNAHESABU KILA MWEZI PEKE YAKE, ili uweze kulinganisha mwezi hadi
+  // mwezi - inaheshimu filter ya Location lakini SI ya "period" (daima
+  // inaonyesha miezi YOTE iliyopo kwenye data).
+  const monthlyBreakdown = useMemo(() => {
+    const byLocation = (arr) => (
+      locationId === 'all' ? arr : arr.filter(x => String(x.locationId) === String(locationId))
+    );
+    const map = {};
+    byLocation(sales).forEach(sale => {
+      if (!sale.date) return;
+      const month = sale.date.slice(0, 7);
+      if (!map[month]) map[month] = { month, revenue: 0, cogs: 0, expenses: 0, count: 0 };
+      map[month].revenue += actualPaidAmount(sale);
+      map[month].count += 1;
+      const fullCost = (sale.unitCost || 0) * (sale.quantity || 1);
+      if (sale.status === 'Paid') {
+        map[month].cogs += fullCost;
+      } else {
+        const total = sale.total || 0;
+        const fraction = total > 0 ? (sale.paid || 0) / total : 0;
+        map[month].cogs += fullCost * fraction;
+      }
+    });
+    byLocation(expenses).forEach(e => {
+      if (!e.date) return;
+      const month = e.date.slice(0, 7);
+      if (!map[month]) map[month] = { month, revenue: 0, cogs: 0, expenses: 0, count: 0 };
+      map[month].expenses += e.amount || 0;
+    });
+    return Object.values(map)
+      .map(m => ({ ...m, profit: (m.revenue - m.cogs) - m.expenses }))
+      .sort((a, b) => b.month.localeCompare(a.month));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sales, expenses, locationId]);
+
+  const monthLabel = (ym) => {
+    const [y, m] = ym.split('-');
+    const names = ['Jan', 'Feb', 'Machi', 'Aprili', 'Mei', 'Juni', 'Julai', 'Agosti', 'Septemba', 'Oktoba', 'Novemba', 'Desemba'];
+    return `${names[parseInt(m, 10) - 1] || m} ${y}`;
+  };
+
   return (
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
@@ -359,6 +403,43 @@ export default function Reports() {
                   <td style={{ padding: 8, color: '#16a34a' }}>{fmtS(d.revenue)}</td>
                   <td style={{ padding: 8, color: '#dc2626' }}>{fmtS(d.expenses)}</td>
                   <td style={{ padding: 8, fontWeight: 700, color: d.profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(d.profit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <h3 className="section-title" style={{ margin: '20px 0 12px' }}>
+        📆 Faida ya Kila Mwezi (Monthly Profit)
+        {locationId !== 'all' && ` — ${locations.find(l => String(l.id) === String(locationId))?.name || ''}`}
+      </h3>
+      <div className="table-container" style={{ overflowX: 'auto', marginBottom: 24 }}>
+        {monthlyBreakdown.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📆</div>
+            <div className="empty-title">No Data</div>
+            <div>No sales or expenses recorded yet</div>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
+                <th style={{ padding: 8 }}>Mwezi</th>
+                <th style={{ padding: 8 }}>Mauzo</th>
+                <th style={{ padding: 8 }}>Revenue</th>
+                <th style={{ padding: 8 }}>Expenses</th>
+                <th style={{ padding: 8 }}>Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monthlyBreakdown.map(m => (
+                <tr key={m.month} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: 8, fontWeight: 600 }}>{monthLabel(m.month)}</td>
+                  <td style={{ padding: 8 }}>{m.count}</td>
+                  <td style={{ padding: 8, color: '#16a34a' }}>{fmtS(m.revenue)}</td>
+                  <td style={{ padding: 8, color: '#dc2626' }}>{fmtS(m.expenses)}</td>
+                  <td style={{ padding: 8, fontWeight: 700, color: m.profit >= 0 ? '#16a34a' : '#dc2626' }}>{fmtS(m.profit)}</td>
                 </tr>
               ))}
             </tbody>
