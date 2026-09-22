@@ -35,6 +35,11 @@ export default function Inventory() {
   // ndani ya Muhtasari wa Bidhaa Zilizoongezwa kwa Siku, ili usilazimike
   // ku-scroll orodha ndefu ya siku+maduka yote kutafuta duka fulani.
   const [summaryLocationFilter, setSummaryLocationFilter] = useState('all');
+  // KIPENGELE: "Product Filter" ndani ya Daily Summary - chuja kwa jina
+  // la bidhaa (byproduct) ili kujua bidhaa fulani imeingizwa (ongezwa)
+  // mara ngapi - inaonyesha idadi ya nyakati + jumla ya pcs, na
+  // inapunguza majedwali/mistari kwa bidhaa hiyo pekee.
+  const [summaryProductSearch, setSummaryProductSearch] = useState('');
 
   useEffect(() => { setPage(1); }, [filter, search]);
 
@@ -81,6 +86,45 @@ export default function Inventory() {
   const filteredDailyInventorySummary = summaryLocationFilter === 'all'
     ? dailyInventorySummary
     : dailyInventorySummary.filter(d => String(d.locationId) === String(summaryLocationFilter));
+
+  // Wakati bidhaa fulani imeandikwa kwenye kisanduku cha "chuja kwa bidhaa",
+  // tunachuja moja kwa moja kwenye inventory_logs (rekodi za mtu binafsi),
+  // kisha tunajenga upya muhtasari wa siku/duka KUTOKANA na rekodi hizo
+  // pekee - ili jedwali kuu na jedwali la ndani (likifunguliwa) vionyeshe
+  // bidhaa hiyo TU, na tuweze kuhesabu "imeingizwa mara ngapi" kwa usahihi.
+  const productSearchActive = summaryProductSearch.trim().length > 0;
+  const matchedProductLogs = productSearchActive
+    ? inventoryLogs.filter(l => (
+      (l.qty || 0) > 0
+      && matchesSearch([l.name, l.size, l.brand], summaryProductSearch)
+      && (summaryLocationFilter === 'all' || String(l.locationId) === String(summaryLocationFilter))
+    ))
+    : [];
+
+  let displaySummary = filteredDailyInventorySummary;
+  if (productSearchActive) {
+    const map = {};
+    matchedProductLogs.forEach(l => {
+      const key = `${l.date}|${l.locationId}`;
+      const loc = locations.find(x => String(x.id) === String(l.locationId));
+      if (!map[key]) {
+        map[key] = {
+          date: l.date, locationId: l.locationId,
+          locationName: loc ? loc.name : 'Unknown', locationIcon: loc ? (loc.type === 'store' ? '🏪' : '🏬') : '❓',
+          newProducts: 0, restocks: 0, totalUnits: 0, totalValue: 0,
+        };
+      }
+      map[key].totalUnits += l.qty || 0;
+      map[key].totalValue += l.totalValue || ((l.unitPrice || 0) * (l.qty || 0));
+      if (l.isNewProduct) map[key].newProducts += 1; else map[key].restocks += 1;
+    });
+    displaySummary = Object.values(map).sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  const productSearchTotals = productSearchActive ? {
+    count: matchedProductLogs.length,
+    qty: matchedProductLogs.reduce((sum, l) => sum + (l.qty || 0), 0),
+  } : null;
 
   const openAdd = () => { setMode('add'); setEditing(null); setModalOpen(true); };
   const openEdit = (p) => { setMode('edit'); setEditing(p); setModalOpen(true); };
@@ -258,8 +302,15 @@ export default function Inventory() {
         <div className="table-container" style={{ overflowX: 'auto', marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
             <h3 className="section-title" style={{ margin: 0 }}>📅 Muhtasari wa Bidhaa Zilizoongezwa kwa Siku</h3>
-            {/* KIPENGELE: chagua duka/store maalum kuona muhtasari wake tu */}
-            <div className="form-group" style={{ margin: 0 }}>
+            {/* KIPENGELE: chagua duka/store maalum + chuja kwa bidhaa kujua imeongezwa mara ngapi */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input
+                className="form-input"
+                style={{ padding: '6px 12px', fontSize: 13, minWidth: 180 }}
+                placeholder="🔍 Chuja kwa Bidhaa..."
+                value={summaryProductSearch}
+                onChange={(e) => setSummaryProductSearch(e.target.value)}
+              />
               <select className="form-select" style={{ padding: '6px 12px', fontSize: 13, minWidth: 160 }} value={summaryLocationFilter} onChange={(e) => setSummaryLocationFilter(e.target.value)}>
                 <option value="all">🏬 Maeneo Yote</option>
                 {locations.map(loc => (
@@ -268,11 +319,17 @@ export default function Inventory() {
               </select>
             </div>
           </div>
-          {filteredDailyInventorySummary.length === 0 ? (
+          {productSearchActive && (
+            <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>
+              📥 "<strong>{summaryProductSearch}</strong>" imeingizwa <strong style={{ color: '#0d9488' }}>{productSearchTotals.count}</strong> mara
+              <span style={{ color: '#64748b' }}> (jumla ya {productSearchTotals.qty} pcs{summaryLocationFilter !== 'all' ? ` — ${locations.find(l => String(l.id) === String(summaryLocationFilter))?.name || ''}` : ''})</span>
+            </div>
+          )}
+          {displaySummary.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📅</div>
               <div className="empty-title">No Data Yet</div>
-              <div>{summaryLocationFilter === 'all' ? 'Ongeza bidhaa ili muhtasari uonekane hapa' : 'Hakuna bidhaa zilizoongezwa duka hili bado'}</div>
+              <div>{productSearchActive ? 'Hakuna bidhaa hiyo iliyoongezwa kipindi hiki' : summaryLocationFilter === 'all' ? 'Ongeza bidhaa ili muhtasari uonekane hapa' : 'Hakuna bidhaa zilizoongezwa duka hili bado'}</div>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -287,10 +344,13 @@ export default function Inventory() {
                 </tr>
               </thead>
               <tbody>
-                {filteredDailyInventorySummary.map(d => {
+                {displaySummary.map(d => {
                   const rowKey = `${d.date}|${d.locationId}`;
                   const isOpen = expandedDate === rowKey;
-                  const dayLogs = isOpen ? inventoryLogs.filter(l => l.date === d.date && String(l.locationId) === String(d.locationId) && (l.qty || 0) > 0) : [];
+                  const dayLogs = isOpen ? inventoryLogs.filter(l => (
+                    l.date === d.date && String(l.locationId) === String(d.locationId) && (l.qty || 0) > 0
+                    && (!productSearchActive || matchesSearch([l.name, l.size, l.brand], summaryProductSearch))
+                  )) : [];
                   return (
                     <Fragment key={rowKey}>
                       <tr

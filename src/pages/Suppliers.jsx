@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
-import { fmtS } from '../utils/format.js';
+import { fmtS, today } from '../utils/format.js';
 import { matchesSearch } from '../utils/search.js';
 import SupplierModal from '../components/SupplierModal.jsx';
 import SupplierGoodsModal from '../components/SupplierGoodsModal.jsx';
@@ -48,6 +48,13 @@ export default function Suppliers() {
   const [goodsModalOpen, setGoodsModalOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [editingGoodsTxn, setEditingGoodsTxn] = useState(null);
+  // KIPENGELE: "Statement Period Filter" - chagua "Mwezi Huu" au mwezi
+  // maalum uliopita kuona statement/ledger ya kipindi hicho tu, badala
+  // ya kupitia miamala yote tangu mwanzo. "Balance" inaendelea kuonyesha
+  // deni HALISI la wakati huo (haibadiliki kwa kuchuja - ni running total
+  // ya historia yote), lakini orodha ya mistari inachujwa kwa kipindi.
+  const [statementPeriod, setStatementPeriod] = useState('all'); // all | month | specific
+  const [statementMonth, setStatementMonth] = useState('');
 
   // ============== Kichupo 2: Wateja wa Jumla (Wholesale) - state ==============
   const [wSearch, setWSearch] = useState('');
@@ -236,6 +243,57 @@ export default function Suppliers() {
 
   const wTotalGoods = wLedger.filter(t => t.type === 'goods').reduce((s, t) => s + t.amount, 0);
   const wTotalPaid = wLedger.filter(t => t.type === 'payment').reduce((s, t) => s + t.amount, 0);
+
+  // KIPENGELE: "Statement Period Filter" - inatumika kwenye statement
+  // za Wasambazaji NA Wateja wa Jumla (kichupo chochote kilichofunguliwa).
+  const todayStr = today();
+  const thisMonthStr = todayStr.slice(0, 7);
+  const activeStatementMonth = statementMonth || thisMonthStr;
+  const inStatementPeriod = (dateStr) => {
+    if (!dateStr) return statementPeriod === 'all';
+    if (statementPeriod === 'month') return dateStr.startsWith(thisMonthStr);
+    if (statementPeriod === 'specific') return dateStr.startsWith(activeStatementMonth);
+    return true; // all
+  };
+  const visibleLedger = ledger.filter(t => inStatementPeriod(t.date));
+  const visibleWLedger = wLedger.filter(t => inStatementPeriod(t.date));
+  const monthLabel = (ym) => {
+    const [y, m] = ym.split('-');
+    const names = ['Jan', 'Feb', 'Machi', 'Aprili', 'Mei', 'Juni', 'Julai', 'Agosti', 'Septemba', 'Oktoba', 'Novemba', 'Desemba'];
+    return `${names[parseInt(m, 10) - 1] || m} ${y}`;
+  };
+  const statementPeriodLabel = statementPeriod === 'month' ? `Mwezi Huu (${monthLabel(thisMonthStr)})`
+    : statementPeriod === 'specific' ? monthLabel(activeStatementMonth)
+    : 'Muda Wote';
+
+  const statementFilterBar = (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+      <span style={{ fontSize: 12, color: '#64748b' }}>📆 Kipindi:</span>
+      <select
+        className="form-select"
+        style={{ padding: '6px 12px', fontSize: 13, minWidth: 140 }}
+        value={statementPeriod}
+        onChange={(e) => setStatementPeriod(e.target.value)}
+      >
+        <option value="all">Muda Wote</option>
+        <option value="month">Mwezi Huu</option>
+        <option value="specific">Chagua Mwezi...</option>
+      </select>
+      {statementPeriod === 'specific' && (
+        <input
+          type="month"
+          className="form-input"
+          style={{ padding: '6px 12px', fontSize: 13 }}
+          value={activeStatementMonth}
+          max={thisMonthStr}
+          onChange={(e) => setStatementMonth(e.target.value)}
+        />
+      )}
+      {statementPeriod !== 'all' && (
+        <span style={{ fontSize: 12, color: '#94a3b8' }}>({statementPeriodLabel})</span>
+      )}
+    </div>
+  );
 
   // Print/PDF ya "Statement" ya mteja wa jumla mmoja - inaonyesha muhtasari
   // (mzigo/malipo/deni) na ledger nzima yenye running balance, tayari kwa kuchapisha.
@@ -479,11 +537,12 @@ export default function Suppliers() {
         </div>
 
         <div className="table-container excel-sheet" style={{ overflowX: 'auto' }}>
-          {ledger.length === 0 ? (
+          {statementFilterBar}
+          {visibleLedger.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📄</div>
               <div className="empty-title">Bado Hakuna Miamala</div>
-              <div>Anza kwa kupokea mzigo wa kwanza kutoka kiwanda hiki.</div>
+              <div>{ledger.length === 0 ? 'Anza kwa kupokea mzigo wa kwanza kutoka kiwanda hiki.' : 'Hakuna miamala kipindi hiki.'}</div>
             </div>
           ) : (
             <table className="excel-table">
@@ -499,7 +558,7 @@ export default function Suppliers() {
                 </tr>
               </thead>
               <tbody>
-                {ledger.map(t => {
+                {visibleLedger.map(t => {
                   const loc = t.locationId ? getLocation(t.locationId) : null;
                   return (
                     <tr key={t.id}>
@@ -605,11 +664,12 @@ export default function Suppliers() {
         </div>
 
         <div className="table-container excel-sheet" style={{ overflowX: 'auto' }}>
-          {wLedger.length === 0 ? (
+          {statementFilterBar}
+          {visibleWLedger.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📄</div>
               <div className="empty-title">Bado Hakuna Miamala</div>
-              <div>Anza kwa kutoa mzigo wa kwanza kwa duka hili.</div>
+              <div>{wLedger.length === 0 ? 'Anza kwa kutoa mzigo wa kwanza kwa duka hili.' : 'Hakuna miamala kipindi hiki.'}</div>
             </div>
           ) : (
             <table className="excel-table">
@@ -624,7 +684,7 @@ export default function Suppliers() {
                 </tr>
               </thead>
               <tbody>
-                {wLedger.map(t => {
+                {visibleWLedger.map(t => {
                   const loc = t.locationId ? getLocation(t.locationId) : null;
                   return (
                     <tr key={t.id}>
