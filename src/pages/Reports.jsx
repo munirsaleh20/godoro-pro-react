@@ -7,8 +7,12 @@ export default function Reports() {
   const { isOwner } = useAuth();
   const { sales, expenses, locations, products, wholesaleTransactions, getStaffName } = useData();
 
-  const [period, setPeriod] = useState('month'); // today | month | year | all
+  const [period, setPeriod] = useState('month'); // today | month | year | all | specific
   const [locationId, setLocationId] = useState('all');
+  // KIPENGELE: "Mwezi Maalum" - chagua mwezi WOWOTE uliopita (si tu "This
+  // Month" ya sasa) bila kulazimika kwenda "This Year"/"All Time" na
+  // kupitia miezi mingine kutafuta faida ya mwezi mmoja tu.
+  const [specificMonth, setSpecificMonth] = useState('');
 
   if (!isOwner()) {
     return (
@@ -23,12 +27,14 @@ export default function Reports() {
   const todayStr = today();
   const thisMonth = todayStr.slice(0, 7);
   const thisYear = todayStr.slice(0, 4);
+  const activeSpecificMonth = specificMonth || thisMonth;
 
   const inPeriod = (dateStr) => {
     if (!dateStr) return false;
     if (period === 'today') return dateStr === todayStr;
     if (period === 'month') return dateStr.startsWith(thisMonth);
     if (period === 'year') return dateStr.startsWith(thisYear);
+    if (period === 'specific') return dateStr.startsWith(activeSpecificMonth);
     return true; // all
   };
 
@@ -110,7 +116,7 @@ export default function Reports() {
       });
     return { storeProfit, dropshipProfit, total: storeProfit + dropshipProfit };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wholesaleTransactions, period, locationId]);
+  }, [wholesaleTransactions, period, locationId, activeSpecificMonth]);
 
   const profit = grossProfit - totalExpenses + wholesaleProfit.total;
 
@@ -132,7 +138,7 @@ export default function Reports() {
       return { ...loc, revenue: rev, expenses: exp, profit: (cash - cogs) - exp, count: locSales.length };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locations, sales, expenses, period]);
+  }, [locations, sales, expenses, period, activeSpecificMonth]);
 
   // Daily breakdown kwa kipindi kilichochaguliwa (revenue/expenses/profit kwa siku)
   const dailyBreakdown = useMemo(() => {
@@ -240,17 +246,34 @@ export default function Reports() {
     return `${names[parseInt(m, 10) - 1] || m} ${y}`;
   };
 
+  const periodLabel = period === 'today' ? 'Leo'
+    : period === 'month' ? 'Mwezi Huu'
+    : period === 'year' ? 'Mwaka Huu'
+    : period === 'specific' ? monthLabel(activeSpecificMonth)
+    : 'Muda Wote';
+
   return (
     <div>
       <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         <h3 className="section-title">📊 Profit & Reports</h3>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <select className="form-select" style={{ padding: '6px 12px', fontSize: 13, minWidth: 130 }} value={period} onChange={(e) => setPeriod(e.target.value)}>
             <option value="today">Today</option>
             <option value="month">This Month</option>
+            <option value="specific">📆 Chagua Mwezi...</option>
             <option value="year">This Year</option>
             <option value="all">All Time</option>
           </select>
+          {period === 'specific' && (
+            <input
+              type="month"
+              className="form-input"
+              style={{ padding: '6px 12px', fontSize: 13 }}
+              value={activeSpecificMonth}
+              max={thisMonth}
+              onChange={(e) => setSpecificMonth(e.target.value)}
+            />
+          )}
           <select className="form-select" style={{ padding: '6px 12px', fontSize: 13, minWidth: 150 }} value={locationId} onChange={(e) => setLocationId(e.target.value)}>
             <option value="all">All Locations</option>
             {locations.map(loc => (
@@ -260,7 +283,7 @@ export default function Reports() {
         </div>
       </div>
 
-      <h3 className="section-title" style={{ margin: '4px 0 12px' }}>🧾 Faida ya Wholesale — {period === 'today' ? 'Leo' : period === 'month' ? 'Mwezi Huu' : period === 'year' ? 'Mwaka Huu' : 'Muda Wote'}</h3>
+      <h3 className="section-title" style={{ margin: '4px 0 12px' }}>🧾 Faida ya Wholesale — {periodLabel}</h3>
       <div className="manager-stat-cards" style={{ marginBottom: 20 }}>
         <div className="manager-stat-card">
           <div className="bg-circle" style={{ background: '#0ea5e9' }}></div>
@@ -352,7 +375,7 @@ export default function Reports() {
         </div>
       </div>
 
-      <h3 className="section-title" style={{ margin: '20px 0 12px' }}>📍 Breakdown by Location ({period === 'today' ? 'Today' : period === 'month' ? 'This Month' : period === 'year' ? 'This Year' : 'All Time'})</h3>
+      <h3 className="section-title" style={{ margin: '20px 0 12px' }}>📍 Breakdown by Location ({periodLabel})</h3>
       <div className="table-container" style={{ overflowX: 'auto', marginBottom: 24 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>

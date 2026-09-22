@@ -31,6 +31,10 @@ export default function Inventory() {
     name: '', size: '', brand: '', qty: '', unitPrice: '', buyPrice: '', locationId: '', source: '',
   });
   const [page, setPage] = useState(1);
+  // KIPENGELE: "Daily Summary Location Filter" - chagua duka/store maalum
+  // ndani ya Muhtasari wa Bidhaa Zilizoongezwa kwa Siku, ili usilazimike
+  // ku-scroll orodha ndefu ya siku+maduka yote kutafuta duka fulani.
+  const [summaryLocationFilter, setSummaryLocationFilter] = useState('all');
 
   useEffect(() => { setPage(1); }, [filter, search]);
 
@@ -73,6 +77,10 @@ export default function Inventory() {
   const baseCount = salesView ? allProductsWithLocations.filter(p => String(p.locationId) === String(currentUser?.locationId)) : allProductsWithLocations;
   const totalStock = baseCount.reduce((sum, p) => sum + p.stock, 0);
   const totalListStock = list.reduce((sum, p) => sum + p.stock, 0);
+
+  const filteredDailyInventorySummary = summaryLocationFilter === 'all'
+    ? dailyInventorySummary
+    : dailyInventorySummary.filter(d => String(d.locationId) === String(summaryLocationFilter));
 
   const openAdd = () => { setMode('add'); setEditing(null); setModalOpen(true); };
   const openEdit = (p) => { setMode('edit'); setEditing(p); setModalOpen(true); };
@@ -248,12 +256,23 @@ export default function Inventory() {
 
       {canManage && showSummary && (
         <div className="table-container" style={{ overflowX: 'auto', marginBottom: 16 }}>
-          <h3 className="section-title" style={{ margin: '0 0 12px' }}>📅 Muhtasari wa Bidhaa Zilizoongezwa kwa Siku</h3>
-          {dailyInventorySummary.length === 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <h3 className="section-title" style={{ margin: 0 }}>📅 Muhtasari wa Bidhaa Zilizoongezwa kwa Siku</h3>
+            {/* KIPENGELE: chagua duka/store maalum kuona muhtasari wake tu */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <select className="form-select" style={{ padding: '6px 12px', fontSize: 13, minWidth: 160 }} value={summaryLocationFilter} onChange={(e) => setSummaryLocationFilter(e.target.value)}>
+                <option value="all">🏬 Maeneo Yote</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.type === 'store' ? '🏪' : '🏬'} {loc.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {filteredDailyInventorySummary.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📅</div>
               <div className="empty-title">No Data Yet</div>
-              <div>Ongeza bidhaa ili muhtasari uonekane hapa</div>
+              <div>{summaryLocationFilter === 'all' ? 'Ongeza bidhaa ili muhtasari uonekane hapa' : 'Hakuna bidhaa zilizoongezwa duka hili bado'}</div>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -268,7 +287,7 @@ export default function Inventory() {
                 </tr>
               </thead>
               <tbody>
-                {dailyInventorySummary.map(d => {
+                {filteredDailyInventorySummary.map(d => {
                   const rowKey = `${d.date}|${d.locationId}`;
                   const isOpen = expandedDate === rowKey;
                   const dayLogs = isOpen ? inventoryLogs.filter(l => l.date === d.date && String(l.locationId) === String(d.locationId) && (l.qty || 0) > 0) : [];
