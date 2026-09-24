@@ -38,7 +38,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, onClose }) {
       />
       <div className={`sidebar ${isOpen ? 'open' : ''}`}>
         <div className="sidebar-top">
-          <div className="sidebar-brand">🛏️ Godoro Pro</div>
+          <div className="sidebar-brand">🛏️ Haroun Matress</div>
           <button className="sidebar-close-btn" onClick={onClose} aria-label="Funga menu">✕</button>
         </div>
         <div className="sidebar-nav">
