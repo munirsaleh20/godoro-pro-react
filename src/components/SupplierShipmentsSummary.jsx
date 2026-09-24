@@ -15,6 +15,7 @@ export default function SupplierShipmentsSummary() {
   const owner = isOwner();
   const { supplierTransactions, suppliers, locations, wholesaleTransactions, wholesaleCustomers } = useData();
   const [expandedSupplierId, setExpandedSupplierId] = useState(null);
+  const [expandedDateKey, setExpandedDateKey] = useState(null);
   const [expandedShipmentId, setExpandedShipmentId] = useState(null);
 
   const shipments = useMemo(() => (
@@ -51,7 +52,9 @@ export default function SupplierShipmentsSummary() {
 
   // NGAZI YA 1: kusanya mizigo kwa SUPPLIER - kila supplier mwenye
   // angalau mzigo mmoja anaonekana kama safu moja, iliyokusanya jumla ya
-  // mizigo yake yote na thamani yake yote.
+  // mizigo yake yote na thamani yake yote. Ndani yake, mizigo IMEPANGWA
+  // KWA TAREHE (NGAZI YA 2) - kila tarehe safu yake mwenyewe, badala ya
+  // kuchanganya mizigo ya tarehe tofauti pamoja.
   const supplierGroups = useMemo(() => {
     const bySupplier = new Map();
     shipments.forEach(t => {
@@ -64,9 +67,45 @@ export default function SupplierShipmentsSummary() {
       const totalValue = owner
         ? txns.reduce((sum, t) => sum + t.items.reduce((s2, it) => s2 + (it.quantity || 0) * (it.buyPrice || 0), 0), 0)
         : txns.reduce((sum, t) => sum + t.items.reduce((s2, it) => s2 + (it.quantity || 0) * (it.sellPrice || 0), 0), 0);
-      return { supplierId, supplierName, txns, totalValue };
+
+      const byDate = new Map();
+      txns.forEach(t => {
+        const d = t.date || 'Haijulikani';
+        if (!byDate.has(d)) byDate.set(d, []);
+        byDate.get(d).push(t);
+      });
+      const dateGroups = Array.from(byDate.entries()).map(([date, dtxns]) => {
+        const dateValue = owner
+          ? dtxns.reduce((sum, t) => sum + t.items.reduce((s2, it) => s2 + (it.quantity || 0) * (it.buyPrice || 0), 0), 0)
+          : dtxns.reduce((sum, t) => sum + t.items.reduce((s2, it) => s2 + (it.quantity || 0) * (it.sellPrice || 0), 0), 0);
+        return { date, txns: dtxns, dateValue };
+      }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+      return { supplierId, supplierName, txns, totalValue, dateGroups };
     }).sort((a, b) => a.supplierName.localeCompare(b.supplierName));
   }, [shipments, suppliers, owner]);
+
+  // Kwa TAREHE MOJA (mizigo yote ya siku hiyo, hata kama ilikwenda maduka
+  // tofauti), tunajenga "Muhtasari wa Bidhaa": kwa kila bidhaa (jina+size+
+  // brand), tunaonyesha kila duka lilipata kiasi gani, kisha JUMLA - mfano
+  // "Dodoma 5x6: MUEMBELADU 4, KIBALOZI 3 — Jumla: 7".
+  const buildProductSummary = (dtxns, resolveDestination) => {
+    const map = new Map();
+    dtxns.forEach(t => {
+      const dest = resolveDestination(t);
+      t.items.forEach(it => {
+        const key = `${(it.name || '').trim()}|${(it.size || '').trim()}|${(it.brand || '').trim()}`;
+        if (!map.has(key)) {
+          map.set(key, { name: it.name, size: it.size, brand: it.brand, byStore: new Map(), totalQty: 0, totalValue: 0 });
+        }
+        const entry = map.get(key);
+        entry.totalQty += it.quantity || 0;
+        entry.totalValue += (it.quantity || 0) * (owner ? (it.buyPrice || 0) : (it.sellPrice || 0));
+        entry.byStore.set(dest, (entry.byStore.get(dest) || 0) + (it.quantity || 0));
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  };
 
   const resolveDestination = (txn) => {
     if (txn.locationId) {
@@ -173,11 +212,14 @@ export default function SupplierShipmentsSummary() {
                   isOpen={isSupplierOpen}
                   owner={owner}
                   onToggle={() => setExpandedSupplierId(isSupplierOpen ? null : group.supplierId)}
+                  expandedDateKey={expandedDateKey}
+                  setExpandedDateKey={setExpandedDateKey}
                   expandedShipmentId={expandedShipmentId}
                   setExpandedShipmentId={setExpandedShipmentId}
                   resolveDestination={resolveDestination}
                   handlePrint={handlePrint}
                   getPreviousBuyPrice={getPreviousBuyPrice}
+                  buildProductSummary={buildProductSummary}
                 />
               );
             })}
@@ -188,7 +230,7 @@ export default function SupplierShipmentsSummary() {
   );
 }
 
-function SupplierRow({ group, isOpen, owner, onToggle, expandedShipmentId, setExpandedShipmentId, resolveDestination, handlePrint, getPreviousBuyPrice }) {
+function SupplierRow({ group, isOpen, owner, onToggle, expandedDateKey, setExpandedDateKey, expandedShipmentId, setExpandedShipmentId, resolveDestination, handlePrint, getPreviousBuyPrice, buildProductSummary }) {
   return (
     <>
       <tr style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: isOpen ? '#f8fafc' : undefined }} onClick={onToggle}>
@@ -203,14 +245,98 @@ function SupplierRow({ group, isOpen, owner, onToggle, expandedShipmentId, setEx
               <thead>
                 <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>
                   <th style={{ padding: '6px 8px 6px 28px' }}>Tarehe</th>
-                  <th style={{ padding: 6 }}>Kwenda (Duka/Store)</th>
+                  <th style={{ padding: 6 }}>Idadi ya Mizigo</th>
+                  <th style={{ padding: 6 }}>{owner ? 'Thamani (Buy)' : 'Thamani (Sell)'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.dateGroups.map(dg => {
+                  const dateKey = `${group.supplierId}|${dg.date}`;
+                  const isDateOpen = expandedDateKey === dateKey;
+                  return (
+                    <DateGroupRow
+                      key={dateKey}
+                      dg={dg}
+                      isOpen={isDateOpen}
+                      owner={owner}
+                      onToggle={() => setExpandedDateKey(isDateOpen ? null : dateKey)}
+                      expandedShipmentId={expandedShipmentId}
+                      setExpandedShipmentId={setExpandedShipmentId}
+                      resolveDestination={resolveDestination}
+                      handlePrint={(txn, dest) => handlePrint(txn, group.supplierName, dest)}
+                      getPreviousBuyPrice={getPreviousBuyPrice}
+                      buildProductSummary={buildProductSummary}
+                    />
+                  );
+                })}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// NGAZI YA 2: TAREHE - safu moja kwa kila tarehe ambayo supplier huyu
+// alitoa mzigo (hata kama ilikwenda maduka mengi siku hiyo hiyo). Ukifungua,
+// unaona (a) "Muhtasari wa Bidhaa" - jumla ya kila bidhaa kwa DUKA na
+// JUMLA yake (bila kujali ilikwenda maduka mangapi), kisha (b) orodha ya
+// mizigo/maduka binafsi ya siku hiyo (kwa Print/PDF na maelezo kamili).
+function DateGroupRow({ dg, isOpen, owner, onToggle, expandedShipmentId, setExpandedShipmentId, resolveDestination, handlePrint, getPreviousBuyPrice, buildProductSummary }) {
+  const productSummary = isOpen ? buildProductSummary(dg.txns, resolveDestination) : [];
+  return (
+    <>
+      <tr style={{ borderTop: '1px solid #e2e8f0', cursor: 'pointer' }} onClick={onToggle}>
+        <td style={{ padding: '6px 8px 6px 28px', fontWeight: 600 }}>{isOpen ? '▾' : '▸'} {dg.date}</td>
+        <td style={{ padding: 6 }}>{dg.txns.length}</td>
+        <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>{fmt(dg.dateValue)}</td>
+      </tr>
+      {isOpen && (
+        <tr>
+          <td colSpan={3} style={{ padding: 0, background: '#eef2f7' }}>
+            {productSummary.length > 0 && (
+              <div style={{ padding: '8px 8px 8px 48px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>📊 Muhtasari wa Bidhaa (Tarehe {dg.date}, Maduka Yote)</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: 6, overflow: 'hidden' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', fontSize: 11.5, color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ padding: 6 }}>Bidhaa</th>
+                      <th style={{ padding: 6 }}>Size</th>
+                      <th style={{ padding: 6 }}>Muhtasari kwa Duka</th>
+                      <th style={{ padding: 6 }}>Jumla Qty</th>
+                      {owner && <th style={{ padding: 6 }}>Jumla Thamani</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productSummary.map((p, idx) => (
+                      <tr key={idx} style={{ borderTop: '1px solid #f1f5f9', fontSize: 12.5 }}>
+                        <td style={{ padding: 6, fontWeight: 600 }}>{p.name}</td>
+                        <td style={{ padding: 6 }}>{p.size || 'N/A'}</td>
+                        <td style={{ padding: 6, color: '#475569' }}>
+                          {Array.from(p.byStore.entries()).map(([store, qty], i) => (
+                            <span key={i}>{i > 0 ? ', ' : ''}{store} <strong>{qty}</strong></span>
+                          ))}
+                        </td>
+                        <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>{p.totalQty}</td>
+                        {owner && <td style={{ padding: 6, fontWeight: 700 }}>{fmt(p.totalValue)}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>
+                  <th style={{ padding: '6px 8px 6px 48px' }}>Kwenda (Duka/Store)</th>
                   <th style={{ padding: 6 }}>Bidhaa</th>
                   <th style={{ padding: 6 }}>{owner ? 'Thamani (Buy)' : 'Thamani (Sell)'}</th>
                   <th style={{ padding: 6 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {group.txns.map(txn => {
+                {dg.txns.map(txn => {
                   const destination = resolveDestination(txn);
                   const isShipmentOpen = expandedShipmentId === txn.id;
                   const totalValue = owner
@@ -225,7 +351,7 @@ function SupplierRow({ group, isOpen, owner, onToggle, expandedShipmentId, setEx
                       totalValue={totalValue}
                       owner={owner}
                       onToggle={() => setExpandedShipmentId(isShipmentOpen ? null : txn.id)}
-                      onPrint={() => handlePrint(txn, group.supplierName, destination)}
+                      onPrint={() => handlePrint(txn, destination)}
                       getPreviousBuyPrice={getPreviousBuyPrice}
                     />
                   );
@@ -243,8 +369,7 @@ function ShipmentRow({ txn, destination, isOpen, totalValue, owner, onToggle, on
   return (
     <>
       <tr style={{ borderTop: '1px solid #e2e8f0', cursor: 'pointer' }} onClick={onToggle}>
-        <td style={{ padding: '6px 8px 6px 28px' }}>{isOpen ? '▾' : '▸'} {txn.date}</td>
-        <td style={{ padding: 6 }}>{destination}</td>
+        <td style={{ padding: '6px 8px 6px 48px' }}>{isOpen ? '▾' : '▸'} {destination}</td>
         <td style={{ padding: 6 }}>{txn.items.length} bidhaa</td>
         <td style={{ padding: 6, fontWeight: 700, color: '#0d9488' }}>{fmt(totalValue)}</td>
         <td style={{ padding: 6 }}>
@@ -253,11 +378,11 @@ function ShipmentRow({ txn, destination, isOpen, totalValue, owner, onToggle, on
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={5} style={{ padding: 0, background: '#eef2f7' }}>
+          <td colSpan={4} style={{ padding: 0, background: '#e2e8f0' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', fontSize: 12, color: '#64748b' }}>
-                  <th style={{ padding: '6px 8px 6px 48px' }}>Bidhaa</th>
+                  <th style={{ padding: '6px 8px 6px 68px' }}>Bidhaa</th>
                   <th style={{ padding: 6 }}>Size</th>
                   <th style={{ padding: 6 }}>Brand</th>
                   <th style={{ padding: 6 }}>Qty</th>
@@ -272,7 +397,7 @@ function ShipmentRow({ txn, destination, isOpen, totalValue, owner, onToggle, on
                   const prev = getPreviousBuyPrice(txn.id, it.name, it.size);
                   return (
                     <tr key={idx} style={{ borderTop: '1px solid #dbe3ee' }}>
-                      <td style={{ padding: '6px 8px 6px 48px', fontWeight: 600 }}>{it.name}</td>
+                      <td style={{ padding: '6px 8px 6px 68px', fontWeight: 600 }}>{it.name}</td>
                       <td style={{ padding: 6 }}>{it.size || 'N/A'}</td>
                       <td style={{ padding: 6 }}>{it.brand || 'N/A'}</td>
                       <td style={{ padding: 6 }}>{it.quantity || 0}</td>

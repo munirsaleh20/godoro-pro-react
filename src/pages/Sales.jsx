@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import { fmtS } from '../utils/format.js';
+import { matchesSearch } from '../utils/search.js';
 import AddSaleModal from '../components/AddSaleModal.jsx';
 import BulkSaleModal from '../components/BulkSaleModal.jsx';
 import EditSaleModal from '../components/EditSaleModal.jsx';
@@ -34,6 +35,10 @@ export default function Sales() {
   // ndani ya "Muhtasari wa Mauzo kwa Siku" ili usilazimike ku-scroll orodha
   // ndefu ya siku+maduka yote kutafuta duka fulani.
   const [summaryLocationFilter, setSummaryLocationFilter] = useState('all');
+  // KIPENGELE: "Product Filter" - chuja orodha kuu ya mauzo kwa jina la
+  // bidhaa (mfano "Goldsun standard"), pamoja na date/location filters
+  // zilizopo tayari.
+  const [productFilter, setProductFilter] = useState('');
 
   const manager = isManager();
   const owner = isOwner();
@@ -45,16 +50,17 @@ export default function Sales() {
   const list = baseList.filter(s => (
     (!dateFrom || s.date >= dateFrom) &&
     (!dateTo || s.date <= dateTo) &&
-    (locationFilter === 'all' || String(s.locationId) === String(locationFilter))
+    (locationFilter === 'all' || String(s.locationId) === String(locationFilter)) &&
+    (!productFilter.trim() || matchesSearch(s.items, productFilter))
   ));
   const total = list.reduce((sum, s) => sum + s.total, 0);
-  const filteringActive = !!(dateFrom || dateTo || locationFilter !== 'all');
+  const filteringActive = !!(dateFrom || dateTo || locationFilter !== 'all' || productFilter.trim());
 
   const filteredDailySummary = summaryLocationFilter === 'all'
     ? dailySalesSummary
     : dailySalesSummary.filter(d => String(d.locationId) === String(summaryLocationFilter));
 
-  useEffect(() => { setPage(1); }, [dateFrom, dateTo, locationFilter]);
+  useEffect(() => { setPage(1); }, [dateFrom, dateTo, locationFilter, productFilter]);
 
   // KIPENGELE: "Pagination" - mauzo yakiwa mengi, onyesha 50 kwa wakati
   // mmoja pekee, na buttons za Next/Previous kuvinjari yaliyobaki.
@@ -137,8 +143,17 @@ export default function Sales() {
             </select>
           </div>
         )}
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label" style={{ fontSize: 12 }}>🔍 Bidhaa</label>
+          <input
+            className="form-input"
+            placeholder="Chuja kwa jina la bidhaa..."
+            value={productFilter}
+            onChange={(e) => setProductFilter(e.target.value)}
+          />
+        </div>
         {filteringActive && (
-          <button className="btn-ghost" onClick={() => { setDateFrom(''); setDateTo(''); setLocationFilter('all'); }}>✖️ Futa Kichujio</button>
+          <button className="btn-ghost" onClick={() => { setDateFrom(''); setDateTo(''); setLocationFilter('all'); setProductFilter(''); }}>✖️ Futa Kichujio</button>
         )}
       </div>
 
