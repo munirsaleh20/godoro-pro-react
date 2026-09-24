@@ -120,6 +120,58 @@ export default function SupplierShipmentsSummary() {
     return '—';
   };
 
+  // KIPENGELE: "Print Muhtasari wa Bidhaa (A4)" - print/PDF ya muhtasari
+  // wa bidhaa za tarehe moja, iliyopangwa kama daftari la mkono (Bidhaa,
+  // Size, Jumla) - orodha rahisi, iliyopangiliwa kwa karatasi ya A4.
+  const handlePrintProductSummary = (supplierName, date, productSummary) => {
+    const rows = productSummary.map(p => `
+        <tr>
+          <td>${escapeHtml(p.name)}</td>
+          <td>${escapeHtml(p.size || '-')}</td>
+          <td class="qty">${p.totalQty}</td>
+        </tr>
+      `).join('');
+    const grandTotal = productSummary.reduce((sum, p) => sum + p.totalQty, 0);
+
+    const html = `
+      <html>
+        <head>
+          <title>Muhtasari wa Bidhaa - ${escapeHtml(supplierName)} - ${escapeHtml(date)}</title>
+          <style>
+            @page { size: A4; margin: 20mm; }
+            body { font-family: Arial, sans-serif; color: #1a1a2e; }
+            h1 { font-size: 18px; margin: 0 0 2px; }
+            .sub { color: #444; font-size: 13px; margin-bottom: 18px; }
+            table { width: 100%; border-collapse: collapse; font-size: 15px; }
+            th { text-align: left; border-bottom: 2px solid #1a1a2e; padding: 8px 6px; }
+            td { border-bottom: 1px solid #cbd5e1; padding: 8px 6px; }
+            td.qty, th.qty { text-align: right; }
+            tfoot td { font-weight: 700; border-top: 2px solid #1a1a2e; border-bottom: none; }
+          </style>
+        </head>
+        <body>
+          <h1>Muhtasari wa Bidhaa</h1>
+          <div class="sub">${escapeHtml(supplierName)} — Tarehe: ${escapeHtml(date)}</div>
+          <table>
+            <thead>
+              <tr><th>Bidhaa</th><th>Size</th><th class="qty">Jumla</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+            <tfoot>
+              <tr><td colspan="2" style="text-align:right;">Jumla Yote:</td><td class="qty">${grandTotal}</td></tr>
+            </tfoot>
+          </table>
+        </body>
+      </html>
+    `;
+    const win = window.open('', '_blank');
+    if (!win) { alert('Please allow pop-ups to print.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
   const handlePrint = (txn, supplierName, destination) => {
     const rows = txn.items.map(it => {
       const prev = owner ? getPreviousBuyPrice(txn.id, it.name, it.size) : null;
@@ -218,6 +270,7 @@ export default function SupplierShipmentsSummary() {
                   setExpandedShipmentId={setExpandedShipmentId}
                   resolveDestination={resolveDestination}
                   handlePrint={handlePrint}
+                  handlePrintProductSummary={handlePrintProductSummary}
                   getPreviousBuyPrice={getPreviousBuyPrice}
                   buildProductSummary={buildProductSummary}
                 />
@@ -230,7 +283,7 @@ export default function SupplierShipmentsSummary() {
   );
 }
 
-function SupplierRow({ group, isOpen, owner, onToggle, expandedDateKey, setExpandedDateKey, expandedShipmentId, setExpandedShipmentId, resolveDestination, handlePrint, getPreviousBuyPrice, buildProductSummary }) {
+function SupplierRow({ group, isOpen, owner, onToggle, expandedDateKey, setExpandedDateKey, expandedShipmentId, setExpandedShipmentId, resolveDestination, handlePrint, handlePrintProductSummary, getPreviousBuyPrice, buildProductSummary }) {
   return (
     <>
       <tr style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: isOpen ? '#f8fafc' : undefined }} onClick={onToggle}>
@@ -264,6 +317,7 @@ function SupplierRow({ group, isOpen, owner, onToggle, expandedDateKey, setExpan
                       setExpandedShipmentId={setExpandedShipmentId}
                       resolveDestination={resolveDestination}
                       handlePrint={(txn, dest) => handlePrint(txn, group.supplierName, dest)}
+                      onPrintProductSummary={(productSummary) => handlePrintProductSummary(group.supplierName, dg.date, productSummary)}
                       getPreviousBuyPrice={getPreviousBuyPrice}
                       buildProductSummary={buildProductSummary}
                     />
@@ -283,7 +337,7 @@ function SupplierRow({ group, isOpen, owner, onToggle, expandedDateKey, setExpan
 // unaona (a) "Muhtasari wa Bidhaa" - jumla ya kila bidhaa kwa DUKA na
 // JUMLA yake (bila kujali ilikwenda maduka mangapi), kisha (b) orodha ya
 // mizigo/maduka binafsi ya siku hiyo (kwa Print/PDF na maelezo kamili).
-function DateGroupRow({ dg, isOpen, owner, onToggle, expandedShipmentId, setExpandedShipmentId, resolveDestination, handlePrint, getPreviousBuyPrice, buildProductSummary }) {
+function DateGroupRow({ dg, isOpen, owner, onToggle, expandedShipmentId, setExpandedShipmentId, resolveDestination, handlePrint, onPrintProductSummary, getPreviousBuyPrice, buildProductSummary }) {
   const productSummary = isOpen ? buildProductSummary(dg.txns, resolveDestination) : [];
   return (
     <>
@@ -297,7 +351,10 @@ function DateGroupRow({ dg, isOpen, owner, onToggle, expandedShipmentId, setExpa
           <td colSpan={3} style={{ padding: 0, background: '#eef2f7' }}>
             {productSummary.length > 0 && (
               <div style={{ padding: '8px 8px 8px 48px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>📊 Muhtasari wa Bidhaa (Tarehe {dg.date}, Maduka Yote)</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>📊 Muhtasari wa Bidhaa (Tarehe {dg.date}, Maduka Yote)</div>
+                  <button className="btn-ghost small" onClick={(e) => { e.stopPropagation(); onPrintProductSummary(productSummary); }}>🖨️ Print / PDF (A4)</button>
+                </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: 6, overflow: 'hidden' }}>
                   <thead>
                     <tr style={{ textAlign: 'left', fontSize: 11.5, color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
